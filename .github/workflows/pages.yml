@@ -2,7 +2,7 @@ name: Publish GitHub Pages
 
 on:
   workflow_run:
-    workflows: [Build, GitHub Pages Cleanup]
+    workflows: [Build, GitHub Pages Cleanup, Skip Intro integration]
     types: [completed]
   workflow_dispatch:
 
