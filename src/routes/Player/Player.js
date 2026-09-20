@@ -312,6 +312,24 @@ const Player = () => {
         video.setTime(target);
         seek(target, video.state.duration, video.state.manifest?.name);
     }, [canSeek, seekStart, seekEnd, video.state.duration, video.state.manifest]);
+    const intro = player.introOutro?.intro ?? null;
+    const skipIntroTarget = !livePlayback &&
+        intro !== null &&
+        Number.isFinite(video.state.time) &&
+        Number.isFinite(intro.from) &&
+        Number.isFinite(intro.to) &&
+        intro.to > intro.from &&
+        video.state.time >= intro.from &&
+        video.state.time < intro.to &&
+        canSeek ?
+        intro.to
+        :
+        null;
+    const onSkipIntroRequested = React.useCallback(() => {
+        if (skipIntroTarget !== null) {
+            commitSeek(skipIntroTarget);
+        }
+    }, [skipIntroTarget, commitSeek]);
     const {
         time: keyboardSeekTime,
         seekBy: seekByKeyboard,
@@ -1067,6 +1085,8 @@ const Player = () => {
                 onPlayRequested={onPlayRequested}
                 onPauseRequested={onPauseRequested}
                 onNextVideoRequested={onNextVideoRequested}
+                skipIntroAvailable={skipIntroTarget !== null}
+                onSkipIntroRequested={onSkipIntroRequested}
                 onMuteRequested={onMuteRequested}
                 onUnmuteRequested={onUnmuteRequested}
                 onVolumeChangeRequested={onVolumeChangeRequested}
