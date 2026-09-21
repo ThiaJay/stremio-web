@@ -20,6 +20,7 @@ const VolumeChangeIndicator = require('./VolumeChangeIndicator');
 const Error = require('./Error');
 const ControlBar = require('./ControlBar');
 const NextVideoPopup = require('./NextVideoPopup');
+const SkipIntroPopup = require('./SkipIntroPopup');
 const StatisticsMenu = require('./StatisticsMenu');
 const OptionsMenu = require('./OptionsMenu');
 const { default: CastDevicesMenu } = require('./CastDevicesMenu');
@@ -41,6 +42,9 @@ const styles = require('./styles');
 const Video = require('./Video');
 const { default: Indicator } = require('./Indicator/Indicator');
 const { default: useMediaSession } = require('./useMediaSession');
+const getSkipIntroTarget = require('./getSkipIntroTarget');
+const getSkipIntroPopupOpen = require('./getSkipIntroPopupOpen');
+const shouldAutoSkipIntro = require('./shouldAutoSkipIntro');
 
 const GAMEPAD_HANDLER_ID = 'player';
 
@@ -116,6 +120,7 @@ const Player = () => {
     const seekEnd = livePlayback ? video.state.live?.end : video.state.duration;
     const canSeek = Number.isFinite(seekStart) && Number.isFinite(seekEnd) && seekEnd > seekStart && Number.isFinite(video.state.time);
     const [nextVideoPopupDismissal, setNextVideoPopupDismissal] = React.useState(null);
+    const [skipIntroPopupDismissal, setSkipIntroPopupDismissal] = React.useState(null);
     const liveEpgRange = currentEpgVideo === null ? null : getEpgTimeRange(currentEpgVideo);
     const nextVideoRemainingTime = isEpg ?
         liveEpgRange === null ? null : liveEpgRange.endTime - epgNow
@@ -126,11 +131,44 @@ const Player = () => {
             (isEpg && nextVideoPopupDismissal.programId !== currentEpgVideo?.id)) &&
         nextVideoRemainingTime !== null && nextVideoRemainingTime > 0 &&
         nextVideoRemainingTime <= settings.nextVideoNotificationDuration;
+
+    const intro = player.introOutro?.intro ?? null;
+    const currentVideoMatches = player.libraryItem !== null &&
+        player.selected?.streamRequest?.path?.id !== undefined &&
+        player.libraryItem.state.video_id === player.selected.streamRequest.path.id;
+    const skipIntroTarget = getSkipIntroTarget({
+        intro,
+        time: video.state.time,
+        duration: video.state.duration,
+        livePlayback,
+        canSeek,
+        streamReady: player.stream?.type === 'Ready' &&
+            video.state.stream !== null &&
+            video.state.loaded === true,
+        currentVideoMatches,
+    });
+    const skipIntroMode = settings.skipIntroMode ?? 'ask';
+    const skipIntroPopupOpen = getSkipIntroPopupOpen({
+        mode: skipIntroMode,
+        target: skipIntroTarget,
+        nextVideoPopupOpen,
+        dismissal: skipIntroPopupDismissal,
+        stream: video.state.stream,
+        intro,
+    });
+    const autoSkipIntro = shouldAutoSkipIntro({
+        mode: skipIntroMode,
+        target: skipIntroTarget,
+        dismissal: skipIntroPopupDismissal,
+        stream: video.state.stream,
+        intro,
+    });
+
     const [sideDrawerOpen, , closeSideDrawer, toggleSideDrawer] = useBinaryState(false);
 
     const menusOpen = React.useMemo(() => {
-        return optionsMenuOpen || subtitlesMenuOpen || audioMenuOpen || speedMenuOpen || statisticsMenuOpen || castDevicesMenuOpen || sideDrawerOpen || nextVideoPopupOpen;
-    }, [optionsMenuOpen, subtitlesMenuOpen, audioMenuOpen, speedMenuOpen, statisticsMenuOpen, castDevicesMenuOpen, sideDrawerOpen, nextVideoPopupOpen]);
+        return optionsMenuOpen || subtitlesMenuOpen || audioMenuOpen || speedMenuOpen || statisticsMenuOpen || castDevicesMenuOpen || sideDrawerOpen || nextVideoPopupOpen || skipIntroPopupOpen;
+    }, [optionsMenuOpen, subtitlesMenuOpen, audioMenuOpen, speedMenuOpen, statisticsMenuOpen, castDevicesMenuOpen, sideDrawerOpen, nextVideoPopupOpen, skipIntroPopupOpen]);
 
     const closeMenus = React.useCallback(() => {
         closeOptionsMenu();
@@ -312,6 +350,28 @@ const Player = () => {
         video.setTime(target);
         seek(target, video.state.duration, video.state.manifest?.name);
     }, [canSeek, seekStart, seekEnd, video.state.duration, video.state.manifest]);
+    const onDismissSkipIntroPopup = React.useCallback(() => {
+        if (intro !== null) {
+            setSkipIntroPopupDismissal({
+                stream: video.state.stream,
+                from: intro.from,
+                to: intro.to,
+            });
+        }
+    }, [intro, video.state.stream]);
+
+    const onSkipIntroRequested = React.useCallback(() => {
+        if (skipIntroTarget !== null) {
+            onDismissSkipIntroPopup();
+            commitSeek(skipIntroTarget);
+        }
+    }, [skipIntroTarget, onDismissSkipIntroPopup, commitSeek]);
+
+    React.useEffect(() => {
+        if (autoSkipIntro) {
+            onSkipIntroRequested();
+        }
+    }, [autoSkipIntro, onSkipIntroRequested]);
     const {
         time: keyboardSeekTime,
         seekBy: seekByKeyboard,
@@ -1095,6 +1155,16 @@ const Player = () => {
                 videoState={video.state}
                 disabled={subtitlesMenuOpen || speedMenuOpen}
             />
+            {
+                skipIntroPopupOpen ?
+                    <SkipIntroPopup
+                        className={classnames(styles['layer'], styles['menu-layer'])}
+                        onDismiss={onDismissSkipIntroPopup}
+                        onSkipIntroRequested={onSkipIntroRequested}
+                    />
+                    :
+                    null
+            }
             {
                 nextVideoPopupOpen ?
                     <NextVideoPopup

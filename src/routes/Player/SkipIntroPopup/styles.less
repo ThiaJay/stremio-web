@@ -1,0 +1,91 @@
+// Copyright (C) 2017-2023 Smart code 203358507
+
+.skip-intro-popup-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 26rem;
+    padding: 1.5rem;
+    animation: slide-fade-in 0.5s ease-in;
+
+    @keyframes slide-fade-in {
+        0% {
+            opacity: 0;
+            transform: translateX(28rem);
+        }
+
+        100% {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: var(--primary-foreground-color);
+    }
+
+    .buttons-container {
+        display: flex;
+        flex-direction: row;
+        gap: 1rem;
+
+        .button-container {
+            flex: 1 1 50%;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            height: 3.5rem;
+            padding: 0 1rem;
+            border-radius: 1.75rem;
+
+            .icon {
+                flex: none;
+                width: 1.4rem;
+                height: 1.4rem;
+                color: var(--primary-foreground-color);
+            }
+
+            .label {
+                max-height: 2.4em;
+                font-size: 1.1rem;
+                font-weight: 500;
+                color: var(--primary-foreground-color);
+            }
+
+            &.dismiss {
+                opacity: 0.6;
+            }
+
+            &.skip-button {
+                background-color: var(--primary-accent-color);
+
+                &:hover, &:focus {
+                    outline: var(--focus-outline-size) solid var(--primary-accent-color);
+                    background-color: transparent;
+                }
+            }
+
+            &:hover, &:focus {
+                background-color: var(--overlay-color);
+            }
+        }
+    }
+}
+
+@media only screen and (max-width: 480px) {
+    .skip-intro-popup-container {
+        width: calc(100vw - 5rem);
+
+        .buttons-container {
+            .button-container {
+                .label {
+                    font-size: 1rem;
+                }
+            }
+        }
+    }
+}

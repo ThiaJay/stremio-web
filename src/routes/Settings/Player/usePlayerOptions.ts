@@ -255,6 +255,46 @@ const usePlayerOptions = (profile: Profile) => {
         }
     }), [profile.settings]);
 
+    const skipIntroModeSelect = useMemo(() => ({
+        options: [
+            {
+                value: 'ask',
+                label: t('PLAYER_SKIP_INTRO_MODE_ASK', { defaultValue: 'Ask' }),
+            },
+            {
+                value: 'always',
+                label: t('PLAYER_SKIP_INTRO_MODE_ALWAYS', { defaultValue: 'Always skip' }),
+            },
+            {
+                value: 'never',
+                label: t('NEVER'),
+            },
+        ],
+        value: profile.settings.skipIntroMode ?? 'ask',
+        title: () => {
+            switch (profile.settings.skipIntroMode ?? 'ask') {
+                case 'always':
+                    return t('PLAYER_SKIP_INTRO_MODE_ALWAYS', { defaultValue: 'Always skip' });
+                case 'never':
+                    return t('NEVER');
+                default:
+                    return t('PLAYER_SKIP_INTRO_MODE_ASK', { defaultValue: 'Ask' });
+            }
+        },
+        onSelect: (value: 'ask' | 'always' | 'never') => {
+            core.transport.dispatch({
+                action: 'Ctx',
+                args: {
+                    action: 'UpdateSettings',
+                    args: {
+                        ...profile.settings,
+                        skipIntroMode: value
+                    }
+                }
+            });
+        }
+    }), [profile.settings]);
+
     const bingeWatchingToggle = useMemo(() => ({
         checked: profile.settings.bingeWatching,
         onClick: () => {
@@ -380,6 +420,7 @@ const usePlayerOptions = (profile: Profile) => {
         seekShortTimeDurationSelect,
         playInExternalPlayerSelect,
         nextVideoPopupDurationSelect,
+        skipIntroModeSelect,
         bingeWatchingToggle,
         playInBackgroundToggle,
         hardwareDecodingToggle,

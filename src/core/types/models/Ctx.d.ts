@@ -29,6 +29,7 @@ type Settings = {
     hideSpoilers: boolean,
     gamepadSupport: boolean,
     nextVideoNotificationDuration: number,
+    skipIntroMode: 'ask' | 'always' | 'never',
     playInBackground: boolean,
     playerType: string | null,
     secondaryAudioLanguage: string | null,
