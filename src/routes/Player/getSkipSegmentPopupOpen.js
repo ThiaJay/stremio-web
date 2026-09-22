@@ -1,23 +1,11 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const sameSegment = (dismissal, segment) => dismissal !== null &&
-    dismissal.generation === segment.generation &&
-    dismissal.kind === segment.kind &&
-    dismissal.from === segment.from &&
-    dismissal.to === segment.to;
+const { getSegmentKey, sameSegment } = require('./skipSegmentIdentity');
 
-const getSkipSegmentPopupOpen = ({
-    segment,
-    target,
-    nextVideoPopupOpen,
-    dismissal,
-}) => {
-    if (segment === null || target === null || nextVideoPopupOpen) {
-        return false;
-    }
-
-    return (segment.mode ?? 'ask') === 'ask' &&
-        !segment.dismissed &&
+const getSkipSegmentPopupOpen = ({ segment, target, nextVideoPopupOpen, dismissal } = {}) => {
+    return getSegmentKey(segment) !== null && Number.isSafeInteger(target) && target > 0 &&
+        target === segment.seekTo && target === segment.to && nextVideoPopupOpen === false &&
+        segment.mode === 'ask' && segment.active === true && segment.dismissed === false &&
         !sameSegment(dismissal, segment);
 };
 

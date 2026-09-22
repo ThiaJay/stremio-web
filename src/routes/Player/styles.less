@@ -123,7 +123,7 @@ html:not(.active-slider-within) {
             bottom: 10rem;
         }
 
-        &.menu-layer {
+        &.menu-layer, &.skip-segment-layer {
             top: initial;
             left: initial;
             right: 4rem;
@@ -160,7 +160,7 @@ html:not(.active-slider-within) {
 @media (orientation: portrait) and (max-width: @minimum) {
     .player-container {
         .layer {
-            &.menu-layer {
+            &.menu-layer, &.skip-segment-layer {
                 right: 2.5rem;
                 bottom: 11rem;
             }
