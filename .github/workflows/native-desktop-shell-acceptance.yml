@@ -40,10 +40,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git cat-file -e "${PRODUCT_COMMIT}^{commit}"
-          git diff --quiet "$PRODUCT_COMMIT" HEAD -- \
-            ':(exclude).github/native-desktop-acceptance/**' \
-            ':(exclude).github/workflows/native-desktop-shell-acceptance.yml'
+          unexpected="$(git diff --name-only "$PRODUCT_COMMIT" HEAD | grep -Ev '^\.github/native-desktop-acceptance/|^\.github/workflows/native-desktop-shell-acceptance\.yml$' || true)"
+          test -z "$unexpected" || { printf 'Unexpected product drift:\n%s\n' "$unexpected"; exit 1; }
           printf 'web_product_commit %s\nvalidation_commit %s\nlinux_shell_commit %s\n' \
             "$PRODUCT_COMMIT" "$(git rev-parse HEAD)" "$LINUX_SHELL_COMMIT" > source-binding.txt
 
