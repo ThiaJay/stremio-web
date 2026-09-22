@@ -255,7 +255,7 @@ const usePlayerOptions = (profile: Profile) => {
         }
     }), [profile.settings]);
 
-    const skipIntroModeSelect = useMemo(() => ({
+    const skipSegmentModeSelect = useMemo(() => ({
         options: [
             {
                 value: 'ask',
@@ -420,7 +420,7 @@ const usePlayerOptions = (profile: Profile) => {
         seekShortTimeDurationSelect,
         playInExternalPlayerSelect,
         nextVideoPopupDurationSelect,
-        skipIntroModeSelect,
+        skipSegmentModeSelect,
         bingeWatchingToggle,
         playInBackgroundToggle,
         hardwareDecodingToggle,
