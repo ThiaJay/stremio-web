@@ -4,7 +4,7 @@ on:
   push:
     branches: [android/tv-side-by-side-dts]
     paths:
-      - .github/workflows/build-stremio-tv-dtsfix-apk.yml
+      - .github/workflows/build-stremio-tv-dtsfix-arm64-apk.yml
   workflow_dispatch:
 
 permissions:
