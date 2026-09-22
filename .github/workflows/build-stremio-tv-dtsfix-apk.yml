@@ -61,15 +61,24 @@ jobs:
             raise SystemExit(f'Expected exactly one NextRenderersFactory.smali, found {len(matches)}')
           smali=matches[0]
           code=smali.read_text()
+          start=code.index('.method protected buildAudioRenderers')
+          end=code.index('.end method', start) + len('.end method')
+          method=code[start:end]
           old='    if-ne p2, p3, :cond_1'
           new='    if-ne p2, p2, :cond_1'
-          if code.count(old)!=1:
-            raise SystemExit(f'Expected one audio renderer preference anchor, found {code.count(old)}')
-          code=code.replace(old,new)
+          if method.count(old)!=1:
+            raise SystemExit(f'Expected one audio renderer preference anchor inside buildAudioRenderers, found {method.count(old)}')
+          method=method.replace(old,new)
+          code=code[:start]+method+code[end:]
+          if code.count(new)!=1:
+            raise SystemExit('Audio-only renderer preference patch was not uniquely applied')
           smali.write_text(code)
 
-          if 'buildVideoRenderers' not in code:
-            raise SystemExit('Video renderer method missing')
+          video_start=code.index('.method protected buildVideoRenderers')
+          video_end=code.index('.end method', video_start)
+          video=code[video_start:video_end]
+          if old not in video:
+            raise SystemExit('Video renderer ordering baseline changed unexpectedly')
           print('Patched manifest and one audio renderer branch only')
           PY
       - name: Rebuild unsigned APK
