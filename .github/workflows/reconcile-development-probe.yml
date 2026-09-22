@@ -23,6 +23,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin development
           base_head="$(git rev-parse HEAD)"
           dev_head="$(git rev-parse origin/development)"
@@ -78,12 +80,18 @@ jobs:
           } >/tmp/comment.md
           gh pr comment 10 --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
       - name: Self clean probe workflow
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
-          rm .github/workflows/reconcile-development-probe.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin integration/universal-player-web
+          git reset --hard origin/integration/universal-player-web
+          rm -f .github/workflows/reconcile-development-probe.yml
           git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
           git commit -m 'Remove development reconciliation probe'
           git push origin HEAD:integration/universal-player-web
