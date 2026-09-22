@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: native-desktop-shell-acceptance
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   linux-shell-runtime:
