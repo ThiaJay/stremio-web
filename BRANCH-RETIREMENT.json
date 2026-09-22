@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "updatedAt": "2026-09-22",
+  "successor": {
+    "branch": "development",
+    "governance": "ThiaJay/stremio-development-foundation",
+    "note": "Closed Skip Intro Web work is preserved through PR handovers, exact tip SHAs and Foundation lifecycle evidence."
+  },
+  "branches": [
+    {
+      "name": "automation/repair-skip-intro-evidence",
+      "tip": "4c252d9067932c7293da5e69e90281833583eb5e",
+      "reason": "Temporary evidence repair branch. Genuine and synthetic evidence boundaries are already preserved in the closed Web PR handover."
+    },
+    {
+      "name": "automation/stremio-delivery-review-20260921",
+      "tip": "70873e6bbf56f9acf5510c2395aa6e77abdf05ff",
+      "reason": "Temporary delivery review branch superseded by final closed Skip Intro Web evidence and current development."
+    },
+    {
+      "name": "feat/skip-intro-button-ready",
+      "tip": "27738313b596932f9855473f8a05a24d87d1c4d7",
+      "reason": "Completed contextual Skip Intro Web implementation closed as preserved engineering evidence after upstream did not adopt this path."
+    },
+    {
+      "name": "repair/skip-intro-reference-image",
+      "tip": "b710b44e4e06fff1626b000302391d976d8627e3",
+      "reason": "Temporary reference image repair branch. Evidence provenance and the withdrawn synthetic preview are preserved in the closed handover."
+    },
+    {
+      "name": "validate/skip-intro-popup-integrated",
+      "tip": "1f596bfa8adbc5ed9a1be4b13df8d515e5f2f2bf",
+      "reason": "Temporary integrated Skip Intro validation branch superseded by closed evidence."
+    },
+    {
+      "name": "validate/skip-intro-popup-web",
+      "tip": "a3a8f0755944e2636ba73cdcf22b81c1ddc16671",
+      "reason": "Temporary Web-only Skip Intro validation branch superseded by closed evidence."
+    }
+  ],
+  "preservation": "Exact branch tips are recorded before deletion. Product, test and evidence lineage remains in closed PR handovers, GitHub Actions history and the Foundation lifecycle authority."
+}
