@@ -1,0 +1,125 @@
+name: Build side by side Stremio TV DTS fix APK
+
+on:
+  push:
+    branches: [android/tv-side-by-side-dts]
+    paths:
+      - .github/workflows/build-stremio-tv-dtsfix-apk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download immutable inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            -o /tmp/stremio.apk \
+            https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            -o /tmp/apktool.jar \
+            https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          echo 'dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423  /tmp/apktool.jar' | sha256sum -c -
+      - name: Decode official APK
+        run: |
+          set -euo pipefail
+          java -jar /tmp/apktool.jar d -f -o /tmp/decoded /tmp/stremio.apk
+      - name: Apply side by side identity and audio only FFmpeg preference
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          root=Path('/tmp/decoded')
+          manifest=root/'AndroidManifest.xml'
+          text=manifest.read_text()
+          replacements={
+            'package="com.stremio.one"':'package="com.stremio.dtsfix"',
+            'com.stremio.one.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION':'com.stremio.dtsfix.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
+            'android:label="@string/app_name"':'android:label="Stremio DTS Fix"',
+            'android:authorities="com.stremio.one.content"':'android:authorities="com.stremio.dtsfix.content"',
+            'android:authorities="com.stremio.one.firebaseinitprovider"':'android:authorities="com.stremio.dtsfix.firebaseinitprovider"',
+            'android:authorities="com.stremio.one.androidx-startup"':'android:authorities="com.stremio.dtsfix.androidx-startup"',
+          }
+          for old,new in replacements.items():
+            if old not in text:
+              raise SystemExit(f'Manifest anchor missing: {old}')
+            text=text.replace(old,new)
+          manifest.write_text(text)
+
+          matches=list(root.glob('smali*/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory.smali'))
+          if len(matches)!=1:
+            raise SystemExit(f'Expected exactly one NextRenderersFactory.smali, found {len(matches)}')
+          smali=matches[0]
+          code=smali.read_text()
+          old='    if-ne p2, p3, :cond_1'
+          new='    if-ne p2, p2, :cond_1'
+          if code.count(old)!=1:
+            raise SystemExit(f'Expected one audio renderer preference anchor, found {code.count(old)}')
+          code=code.replace(old,new)
+          smali.write_text(code)
+
+          if 'buildVideoRenderers' not in code:
+            raise SystemExit('Video renderer method missing')
+          print('Patched manifest and one audio renderer branch only')
+          PY
+      - name: Rebuild unsigned APK
+        run: |
+          set -euo pipefail
+          java -jar /tmp/apktool.jar b /tmp/decoded -o /tmp/stremio-dtsfix-unsigned.apk
+      - name: Sign side by side test APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          test -x "$build_tools/apksigner"
+          test -x "$build_tools/zipalign"
+          keytool -genkeypair -noprompt \
+            -keystore /tmp/dtsfix.jks \
+            -storepass changeit \
+            -keypass changeit \
+            -alias dtsfix \
+            -keyalg RSA -keysize 3072 -validity 3650 \
+            -dname "CN=Stremio DTS Fix Test,O=Local Side By Side Build,C=GB"
+          "$build_tools/zipalign" -f -p 4 /tmp/stremio-dtsfix-unsigned.apk /tmp/stremio-dtsfix-aligned.apk
+          "$build_tools/apksigner" sign \
+            --ks /tmp/dtsfix.jks \
+            --ks-pass pass:changeit \
+            --key-pass pass:changeit \
+            --out /tmp/Stremio-DTS-Fix-1.10.4-arm.apk \
+            /tmp/stremio-dtsfix-aligned.apk
+          "$build_tools/apksigner" verify --verbose --print-certs /tmp/Stremio-DTS-Fix-1.10.4-arm.apk
+      - name: Verify patched package and exact bytecode delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$build_tools/aapt" dump badging /tmp/Stremio-DTS-Fix-1.10.4-arm.apk | head -8
+          "$build_tools/aapt" dump badging /tmp/Stremio-DTS-Fix-1.10.4-arm.apk | grep -F "package: name='com.stremio.dtsfix'"
+          grep -R -F 'if-ne p2, p2, :cond_1' /tmp/decoded/smali*/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory.smali
+          mkdir -p dist
+          cp /tmp/Stremio-DTS-Fix-1.10.4-arm.apk dist/
+          sha256sum dist/Stremio-DTS-Fix-1.10.4-arm.apk > dist/SHA256SUMS.txt
+          cat > dist/README.txt <<'EOF'
+          Stremio Android TV 1.10.4 ARM side-by-side DTS test build.
+          Package: com.stremio.dtsfix
+          Official package com.stremio.one is not replaced.
+          Patch: FFmpeg audio renderer is preferred while video renderer ordering is unchanged.
+          Source APK SHA256: e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b
+          Signing: ephemeral test key for this build only.
+          EOF
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stremio-tv-dtsfix-arm
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
