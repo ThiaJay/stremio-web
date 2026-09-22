@@ -1,0 +1,62 @@
+name: Android DTS deployment kit validation
+
+on:
+  push:
+    branches: [android/dts-audio-recovery]
+    paths:
+      - android-dts/deploy/**
+      - .github/workflows/android-dts-deploy-kit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  powershell:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Parse deployment script
+        shell: powershell
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path '.\android-dts\deploy\Deploy-StremioDtsFix.ps1'),
+            [ref]$null,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+            exit 1
+          }
+      - name: Prove missing APK fails before any device mutation
+        shell: powershell
+        run: |
+          $stdout = Join-Path $env:RUNNER_TEMP 'dts-deploy-stdout.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'dts-deploy-stderr.txt'
+          $process = Start-Process powershell.exe -Wait -PassThru -NoNewWindow `
+            -ArgumentList @(
+              '-NoLogo',
+              '-NoProfile',
+              '-File',
+              (Resolve-Path '.\android-dts\deploy\Deploy-StremioDtsFix.ps1'),
+              '-Apk',
+              '.\definitely-missing.apk'
+            ) `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr
+          $output = ((Get-Content $stdout -Raw -ErrorAction SilentlyContinue) + [Environment]::NewLine + (Get-Content $stderr -Raw -ErrorAction SilentlyContinue))
+          if ($process.ExitCode -eq 0) { throw 'Missing APK unexpectedly succeeded' }
+          if ($output -notmatch 'official app is left unchanged') {
+            throw 'Expected fail closed message was not emitted'
+          }
+      - name: Guard destructive adb commands
+        shell: powershell
+        run: |
+          $text = Get-Content .\android-dts\deploy\Deploy-StremioDtsFix.ps1 -Raw
+          foreach ($forbidden in @('adb uninstall', ' pm clear ', 'shell pm clear', 'uninstall $Package')) {
+            if ($text.ToLowerInvariant().Contains($forbidden.ToLowerInvariant())) {
+              throw "Forbidden destructive command found: $forbidden"
+            }
+          }

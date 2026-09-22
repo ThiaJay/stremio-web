@@ -1,0 +1,29 @@
+name: Android DTS local deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      apk_path:
+        description: Absolute path to the signed replacement APK on the self hosted Windows runner
+        required: true
+        type: string
+      device_serial:
+        description: Optional adb device serial
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Deploy without uninstalling the official app
+        shell: powershell
+        env:
+          ANDROID_SERIAL: ${{ inputs.device_serial }}
+        run: |
+          ./android-dts/deploy/Deploy-StremioDtsFix.ps1 -Apk "${{ inputs.apk_path }}"
