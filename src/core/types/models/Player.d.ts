@@ -49,6 +49,32 @@ type AudioPreference = {
 
 type VideoScale = 'contain' | 'cover' | 'fill';
 
+type IntroData = {
+    from: number,
+    to: number,
+    duration: number | null,
+};
+
+type IntroOutro = {
+    intro: IntroData | null,
+    outro: number | null,
+};
+
+type SkipSegmentKind = 'intro' | 'recap' | 'outro' | 'preview';
+
+type SkipSegmentState = {
+    kind: SkipSegmentKind,
+    generation: number,
+    videoId: string,
+    from: number,
+    to: number,
+    duration: number,
+    mode: 'ask' | 'always' | 'never',
+    active: boolean,
+    dismissed: boolean,
+    seekTo: number | null,
+};
+
 type SubtitleSource = 'embedded' | 'external';
 
 type SubtitlePreference = {
@@ -83,6 +109,9 @@ type Player = {
     audioPreference: AudioPreference | null,
     subtitlePreference: SubtitlePreference | null,
     videoScale: VideoScale | null,
+    introOutro: IntroOutro | null,
+    skipSegment: SkipSegmentState | null,
+    skipIntro?: SkipSegmentState | null,
     subtitles: Subtitle[],
     title: string | null,
 };
