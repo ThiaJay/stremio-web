@@ -44,6 +44,30 @@ jobs:
           if ! grep -qF 'No valid variant mask found' out/search.txt; then
             echo 'Exact phrase was not present in decoded dex text.' | tee -a out/search.txt
           fi
+
+      - name: Search packaged native libraries and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo
+            echo '=== Native/assets exact phrase ==='
+            while IFS= read -r -d '' file; do
+              if strings -a "$file" 2>/dev/null | grep -Fq 'No valid variant mask found'; then
+                echo "MATCH $file"
+                strings -a "$file" | grep -nF -C 3 'No valid variant mask found' || true
+              fi
+            done < <(find /tmp/decoded/lib /tmp/decoded/assets /tmp/decoded/unknown -type f -print0 2>/dev/null || true)
+            echo
+            echo '=== Native/assets variant-mask phrases ==='
+            while IFS= read -r -d '' file; do
+              hit="$(strings -a "$file" 2>/dev/null | grep -iE 'variant.{0,30}mask|mask.{0,30}variant' | head -n 20 || true)"
+              if [ -n "$hit" ]; then
+                echo "FILE $file"
+                printf '%s\n' "$hit"
+              fi
+            done < <(find /tmp/decoded/lib /tmp/decoded/assets /tmp/decoded/unknown -type f -print0 2>/dev/null || true)
+          } | tee -a out/search.txt
       - uses: actions/upload-artifact@v7
         with:
           name: android-variant-mask-inspection
