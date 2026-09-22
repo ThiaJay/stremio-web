@@ -140,6 +140,14 @@ test('the real patched ShellVideo receives native timing without correction writ
     assert.equal(writes.length, before);
     ipc.emit('mpv-prop-change', { name: 'seeking', data: true });
     assert.equal(samples.at(-1), null);
+    ipc.emit('mpv-prop-change', { name: 'paused-for-cache', data: true });
+    ipc.emit('mpv-prop-change', { name: 'seeking', data: false });
+    ipc.emit('mpv-prop-change', { name: 'avsync', data: 0.5 });
+    assert.equal(samples.at(-1), null, 'Seek completion must not override ongoing buffering');
+    ipc.emit('mpv-prop-change', { name: 'paused-for-cache', data: false });
+    ipc.emit('mpv-prop-change', { name: 'eof-reached', data: true });
+    ipc.emit('mpv-prop-change', { name: 'avsync', data: 0.5 });
+    assert.equal(samples.at(-1), null, 'Ended playback must not report fresh timing');
     player.dispatch({ type: 'command', commandName: 'unload' });
     ipc.emit('mpv-prop-change', { name: 'avsync', data: 0.5 });
     assert.equal(samples.at(-1), null);

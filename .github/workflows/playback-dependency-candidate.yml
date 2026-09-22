@@ -28,16 +28,14 @@ jobs:
           node-version: 22
       - name: Install the locked released dependencies
         run: pnpm install --frozen-lockfile
-      - name: Prepare the native player patch when not already installed
+      - name: Generate the native patch from the pristine locked release
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f node_modules/@stremio/stremio-video/src/ShellVideo/AvSyncTelemetry.js ]; then
-            pnpm patch @stremio/stremio-video@0.0.98 --edit-dir .player-dependency-work
-            node dependency-patches/stremio-video/prepare.cjs .player-dependency-work
-            pnpm patch-commit .player-dependency-work
-            rm -rf .player-dependency-work
-          fi
+          pnpm patch @stremio/stremio-video@0.0.98 --ignore-existing --edit-dir .player-dependency-work
+          node dependency-patches/stremio-video/prepare.cjs .player-dependency-work
+          pnpm patch-commit .player-dependency-work
+          rm -rf .player-dependency-work
       - name: Verify reproducible installation and installed native adapter
         run: |
           pnpm install --frozen-lockfile

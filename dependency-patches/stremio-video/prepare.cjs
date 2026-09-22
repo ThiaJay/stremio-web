@@ -20,7 +20,7 @@ function transform(source) {
     next = replaceOnce(next, '    var ipc = options.shellTransport;', '    var ipc = options.shellTransport;\n    var avSyncTelemetry = new AvSyncTelemetry();\n    var avSyncSeeking = true;');
     next = replaceOnce(next, "    ipc.send('mpv-observe-prop', 'seeking');", "    ipc.send('mpv-observe-prop', 'seeking');\n    ipc.send('mpv-observe-prop', 'avsync');");
     next = replaceOnce(next, "    ipc.on('mpv-prop-change', function(args) {\n        switch (args.name) {", "    ipc.on('mpv-prop-change', function(args) {\n        if (destroyed || !args) return;\n        if (args.name === 'seeking') avSyncSeeking = args.data !== false;\n        if (['path', 'pause', 'seeking', 'paused-for-cache', 'aid', 'vid', 'eof-reached'].indexOf(args.name) !== -1) {\n            avSyncTelemetry.reset();\n            onPropChanged('avSync');\n        }\n        if (args.name === 'avsync') {\n            if (avSyncTelemetry.observe(args.data, avSyncActive())) onPropChanged('avSync');\n            return;\n        }\n        switch (args.name) {");
-    next = replaceOnce(next, '    function getProp(propName) {', "    function avSyncActive() {\n        return !destroyed && stream !== null && props.loaded === true &&\n            props.pause === false && props.buffering === false && !avSyncSeeking &&\n            typeof props.aid === 'string' && typeof props.vid === 'string';\n    }\n    function getProp(propName) {\n        if (propName === 'avSync') return avSyncTelemetry.snapshot(avSyncActive());");
+    next = replaceOnce(next, '    function getProp(propName) {', "    function avSyncActive() {\n        return !destroyed && stream !== null && props.loaded === true &&\n            props.pause === false && props.buffering === false && !avSyncSeeking &&\n            props['paused-for-cache'] === false && props['eof-reached'] !== true &&\n            typeof props.aid === 'string' && typeof props.vid === 'string';\n    }\n    function getProp(propName) {\n        if (propName === 'avSync') return avSyncTelemetry.snapshot(avSyncActive());");
     next = replaceOnce(next, "            case 'unload': {", "            case 'unload': {\n                avSyncTelemetry.reset();\n                onPropChanged('avSync');");
     return next;
 }
@@ -36,6 +36,7 @@ function main() {
     const source = fs.readFileSync(path.join(root, shellPath), 'utf8');
     if (verify) {
         const proof = JSON.parse(fs.readFileSync('playback-dependency-proof.json', 'utf8'));
+        assert.equal(sha256(fs.readFileSync(__filename)), proof.preparerSha256, 'Patch source changed without regeneration');
         assert.equal(sha256(source), proof.shellAfterSha256);
         assert.equal(fs.readFileSync(path.join(root, modulePath), 'utf8'), moduleSource);
         assert.equal(source.includes("commands: ['load', 'unload', 'destroy']"), true, 'No unvalidated correction command may be advertised');
@@ -56,6 +57,7 @@ function main() {
         upstream: 'https://github.com/Stremio/stremio-video',
         licence: pkg.license,
         sourceCommit: process.env.GITHUB_SHA || null,
+        preparerSha256: sha256(fs.readFileSync(__filename)),
         shellBeforeSha256: sha256(source),
         shellAfterSha256: sha256(next),
         telemetrySha256: sha256(moduleSource),
