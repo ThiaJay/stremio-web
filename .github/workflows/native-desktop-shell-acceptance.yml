@@ -59,7 +59,8 @@ jobs:
             qml-module-qtwebengine qml-module-qtwebchannel qml-module-qt-labs-platform \
             qml-module-qtquick-dialogs qml-module-qtquick-controls qml-module-qt-labs-settings \
             qml-module-qt-labs-folderlistmodel libmpv-dev libssl-dev librsvg2-bin xvfb xauth ffmpeg
-          npm install --no-save --no-audit --no-fund playwright@1.58.2
+          mkdir -p /tmp/native-desktop-acceptance
+          npm install --prefix /tmp/native-desktop-acceptance --no-package-lock --no-audit --no-fund playwright-core@1.58.2
 
       - name: Build pinned official Stremio desktop shell
         run: |
@@ -104,6 +105,7 @@ jobs:
         env:
           ACCEPTANCE_OUT: native-desktop-receipt
           CDP_ENDPOINT: http://127.0.0.1:9222
+          NODE_PATH: /tmp/native-desktop-acceptance/node_modules
         run: node .github/native-desktop-acceptance/smoke.cjs
 
       - name: Preserve exact receipt
