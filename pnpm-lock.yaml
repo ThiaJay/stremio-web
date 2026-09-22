@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@stremio/stremio-video@0.0.98': 633775119810c2c5c48d068e99889d4f764ed010b8a12dfb8611ee80e1da45a3
+
 importers:
 
   .:
@@ -25,7 +28,7 @@ importers:
         version: 5.15.0
       '@stremio/stremio-video':
         specifier: 0.0.98
-        version: 0.0.98
+        version: 0.0.98(patch_hash=633775119810c2c5c48d068e99889d4f764ed010b8a12dfb8611ee80e1da45a3)
       bowser:
         specifier: 2.14.1
         version: 2.14.1
@@ -1428,7 +1431,7 @@ packages:
     resolution: {integrity: sha512-dYlPgu9W/H7c9s1zmW5tiDnRenaUa4Hg1QCyOg1lhOcgSfM/bVTi5nnqX+IfvGTTUNA0zgzh8hI3o3miwnZxTg==}
 
   '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/194999e3e4048c37da86c7a4506316bc2542a266/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz':
-    resolution: {tarball: https://raw.githubusercontent.com/ThiaJay/stremio-core/194999e3e4048c37da86c7a4506316bc2542a266/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz}
+    resolution: {integrity: sha512-vBZnTd+kRDs2FkQpbmp7IDKn3Idz0iR84Q6549Q7Qg/r2P8wCe6HqyHirPMkUor3+cY4Iilan7omECRQf/xk3g==, tarball: https://raw.githubusercontent.com/ThiaJay/stremio-core/194999e3e4048c37da86c7a4506316bc2542a266/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz}
     version: 0.63.1
 
   '@stremio/stremio-icons@5.15.0':
@@ -6526,7 +6529,7 @@ snapshots:
 
   '@stremio/stremio-icons@5.15.0': {}
 
-  '@stremio/stremio-video@0.0.98':
+  '@stremio/stremio-video@0.0.98(patch_hash=633775119810c2c5c48d068e99889d4f764ed010b8a12dfb8611ee80e1da45a3)':
     dependencies:
       '@stremio/libass-wasm': https://github.com/Stremio/JavascriptSubtitlesOctopus/releases/download/v4.2.6/stremio-libass-wasm-4.2.6.tgz
       buffer: 6.0.3

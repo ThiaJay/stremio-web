@@ -1,0 +1,80 @@
+diff --git a/src/ShellVideo/ShellVideo.js b/src/ShellVideo/ShellVideo.js
+index c2946487b344479517e6564c564b2062d7fe4df2..1148c857164e235d47ca71ae6d4d1d13b3215256 100644
+--- a/src/ShellVideo/ShellVideo.js
++++ b/src/ShellVideo/ShellVideo.js
+@@ -50,6 +50,7 @@ function ShellVideo(options) {
+     var ipc = options.shellTransport;
+     var observedProps = {};
+     var props = {};
++    var loadEpoch = 0;
+     var stremioProps = {};
+     Object.keys(stremioToMPVProps).forEach(function(key) {
+         if(stremioToMPVProps[key]) {
+@@ -170,6 +171,7 @@ function ShellVideo(options) {
+ 
+     var last_time = 0;
+     ipc.on('mpv-prop-change', function(args) {
++        if (destroyed) return;
+         switch (args.name) {
+             case 'mpv-version':
+                 resolveMPVVersion(args.data);
+@@ -229,12 +231,13 @@ function ShellVideo(options) {
+             case 'paused-for-cache':
+             case 'seeking':
+             {
++                props[args.name] = args.data;
+                 if (args.name === 'paused-for-cache') {
+-                    props[args.name] = args.data;
+                     updateLoaded();
+                 }
+-                if(props.buffering !== args.data) {
+-                    props.buffering = args.data;
++                var buffering = props['paused-for-cache'] === true || props.seeking === true;
++                if(props.buffering !== buffering) {
++                    props.buffering = buffering;
+                     onPropChanged('buffering');
+                 }
+                 break;
+@@ -326,6 +329,7 @@ function ShellVideo(options) {
+         }
+     });
+     ipc.on('mpv-event-ended', function(args) {
++        if (destroyed) return;
+         // older shells report 'other' for every non-error reason, including eof
+         if (args.error) onError(args.error);
+         else if (!args.reason || args.reason === 'eof' || args.reason === 'other') {
+@@ -333,6 +337,7 @@ function ShellVideo(options) {
+         }
+     });
+     ipc.on('mpv-event-video-ready', function(args) {
++        if (destroyed) return;
+         if (!args || !Number.isSafeInteger(args.loadId) || typeof args.ready !== 'boolean') {
+             return;
+         }
+@@ -349,6 +354,7 @@ function ShellVideo(options) {
+     });
+ 
+     function getProp(propName) {
++        if (propName === 'stream') return stream;
+         if (propName === 'hdrInfo') return props.hdrInfo || null;
+         if (propName === 'videoScale') return props.videoScale || 'contain';
+         if (propName === 'assSubtitlesStylingActive') return props.assSubtitlesStylingActive === true;
+@@ -506,7 +512,9 @@ function ShellVideo(options) {
+             case 'load': {
+                 command('unload');
+                 if (commandArgs && commandArgs.stream && typeof commandArgs.stream.url === 'string') {
++                    var requestedLoadEpoch = loadEpoch;
+                     waitForMPVVersion.then(function (mpvVersion) {
++                        if (destroyed || requestedLoadEpoch !== loadEpoch) return;
+                         stream = commandArgs.stream;
+                         onPropChanged('stream');
+ 
+@@ -577,6 +585,8 @@ function ShellVideo(options) {
+                 break;
+             }
+             case 'unload': {
++                loadEpoch += 1;
++                stream = null;
+                 var wasASSSubtitlesStylingActive = props.assSubtitlesStylingActive === true;
+                 activeVideoReadyLoadId = null;
+                 props = {
