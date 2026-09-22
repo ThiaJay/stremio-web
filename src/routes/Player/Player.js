@@ -41,6 +41,7 @@ const styles = require('./styles');
 const Video = require('./Video');
 const { default: Indicator } = require('./Indicator/Indicator');
 const { default: useMediaSession } = require('./useMediaSession');
+const getEndPlaybackTransition = require('./getEndPlaybackTransition');
 
 const GAMEPAD_HANDLER_ID = 'player';
 
@@ -250,16 +251,16 @@ const Player = () => {
     const onEnded = React.useCallback(() => {
         ended();
 
-        if (isEpg) {
-            return;
-        }
+        const transition = getEndPlaybackTransition({
+            isEpg,
+            hasNextVideo: player.nextVideo !== null,
+            bingeWatching: profile.settings.bingeWatching,
+        });
 
-        if (player.nextVideo !== null) {
+        if (transition === 'advance' && player.nextVideo !== null) {
             nextVideo();
-
-            const deepLinks = player.nextVideo.deepLinks;
-            handleNextVideoNavigation(deepLinks, profile.settings.bingeWatching, true);
-        } else {
+            handleNextVideoNavigation(player.nextVideo.deepLinks, true, true);
+        } else if (transition === 'back') {
             goBack();
         }
     }, [isEpg, player.nextVideo, profile.settings.bingeWatching, handleNextVideoNavigation, ended, nextVideo, goBack]);
