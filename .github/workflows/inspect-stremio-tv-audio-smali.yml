@@ -1,0 +1,46 @@
+name: Inspect Stremio TV audio renderer smali
+
+on:
+  push:
+    branches: [android/tv-side-by-side-dts]
+    paths: [.github/workflows/inspect-stremio-tv-audio-smali.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download exact official APK and pinned Apktool
+        run: |
+          set -euo pipefail
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            -o /tmp/stremio.apk \
+            https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            -o /tmp/apktool.jar \
+            https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          echo 'dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423  /tmp/apktool.jar' | sha256sum -c -
+      - name: Decode and print only buildAudioRenderers
+        run: |
+          set -euo pipefail
+          java -jar /tmp/apktool.jar d -f --no-res -o /tmp/decoded /tmp/stremio.apk >/tmp/apktool.log
+          target="$(grep -R -l 'Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory;' /tmp/decoded/smali* | head -1)"
+          test -n "$target"
+          echo "TARGET=$target"
+          python - "$target" <<'PY'
+          import sys
+          p=sys.argv[1]
+          lines=open(p,encoding='utf-8').read().splitlines()
+          starts=[i for i,x in enumerate(lines) if '.method' in x and 'buildAudioRenderers' in x]
+          if len(starts)!=1:
+              raise SystemExit(f'Expected one buildAudioRenderers method, found {len(starts)}')
+          a=starts[0]
+          b=next(i for i in range(a+1,len(lines)) if lines[i].strip()=='.end method')
+          for i in range(a,b+1):
+              print(f'{i+1}: {lines[i]}')
+          PY
