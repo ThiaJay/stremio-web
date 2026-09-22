@@ -1,0 +1,127 @@
+name: Native desktop shell acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/native-desktop-shell-20260922
+    paths:
+      - .github/native-desktop-acceptance/**
+      - .github/workflows/native-desktop-shell-acceptance.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-desktop-shell-acceptance
+  cancel-in-progress: false
+
+jobs:
+  shell-runtime:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact Web candidate
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Verify product parent binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRODUCT_PARENT="$(git rev-parse HEAD~2)"
+          test "$PRODUCT_PARENT" = "0ae947555fbb9da757d640e4179073063636a26e"
+          printf 'web_product_commit %s\nvalidation_commit %s\n' "$PRODUCT_PARENT" "$(git rev-parse HEAD)" > source-binding.txt
+
+      - name: Install pnpm and Node
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Build exact Web product
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Install native shell build and runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y \
+            build-essential cmake pkg-config git curl ca-certificates \
+            qtbase5-dev qtdeclarative5-dev qtwebengine5-dev libqt5webchannel5-dev \
+            qml-module-qtwebengine qml-module-qtwebchannel qml-module-qt-labs-platform \
+            qml-module-qtquick-dialogs qml-module-qtquick-controls qml-module-qt-labs-settings \
+            qml-module-qt-labs-folderlistmodel libmpv-dev libssl-dev librsvg2-bin xvfb xauth ffmpeg
+          npm install --no-save --no-audit --no-fund playwright@1.58.2
+
+      - name: Build pinned official Stremio desktop shell
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/Stremio/stremio-shell.git shell
+          cd shell
+          git checkout --detach c3a8bcbf857d5569b6ae7444ead0dc0a0814888b
+          git submodule update --init --recursive
+          test "$(git rev-parse HEAD)" = "c3a8bcbf857d5569b6ae7444ead0dc0a0814888b"
+          qmake
+          make -f release.makefile -j2
+          test -x build/stremio
+          printf 'shell_commit %s\n' "$(git rev-parse HEAD)" >> ../source-binding.txt
+
+      - name: Prepare isolated shell runtime
+        run: |
+          set -euo pipefail
+          if [ -f shell/server.js ]; then cp shell/server.js shell/build/server.js; fi
+          if [ ! -f shell/build/server.js ] && [ -f shell/server-url.txt ]; then curl --fail --location "$(cat shell/server-url.txt)" -o shell/build/server.js; fi
+          ln -sf "$(command -v node)" shell/build/node
+          test -f shell/build/server.js
+          test -x shell/build/node
+
+      - name: Launch source-bound Web server and native shell
+        run: |
+          set -euo pipefail
+          mkdir -p native-desktop-receipt
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory build > native-desktop-receipt/web-server.log 2>&1 &
+          echo $! > native-desktop-receipt/web-server.pid
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/ >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:4173/ >/dev/null
+          (
+            cd shell/build
+            export QTWEBENGINE_REMOTE_DEBUGGING=9222
+            export QTWEBENGINE_DISABLE_SANDBOX=1
+            export QTWEBENGINE_CHROMIUM_FLAGS='--no-sandbox --disable-gpu --autoplay-policy=no-user-gesture-required'
+            xvfb-run -a ./stremio '--webui-url=http://127.0.0.1:4173/#/board' --development --streaming-server > ../../native-desktop-receipt/shell.log 2>&1
+          ) &
+          echo $! > native-desktop-receipt/shell.pid
+
+      - name: Exercise real Stremio Shell WebEngine integration
+        env:
+          ACCEPTANCE_OUT: native-desktop-receipt
+          CDP_ENDPOINT: http://127.0.0.1:9222
+        run: node .github/native-desktop-acceptance/smoke.cjs
+
+      - name: Preserve exact receipt
+        if: always()
+        shell: bash
+        run: |
+          {
+            cat source-binding.txt 2>/dev/null || true
+            printf 'run %s\n' "$GITHUB_RUN_ID"
+            printf 'harness_sha256 '
+            sha256sum .github/native-desktop-acceptance/smoke.cjs | cut -d' ' -f1
+          } > native-desktop-receipt/SOURCE.txt
+          cp source-binding.txt native-desktop-receipt/source-binding.txt 2>/dev/null || true
+          if [ -f native-desktop-receipt/shell.pid ]; then kill "$(cat native-desktop-receipt/shell.pid)" 2>/dev/null || true; fi
+          if [ -f native-desktop-receipt/web-server.pid ]; then kill "$(cat native-desktop-receipt/web-server.pid)" 2>/dev/null || true; fi
+
+      - name: Upload native desktop receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-desktop-shell-acceptance
+          path: native-desktop-receipt/
+          retention-days: 14
+          if-no-files-found: error
