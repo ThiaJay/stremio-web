@@ -12,6 +12,8 @@ declare const usePlayer: (urlParams: UrlParams) => [
     pausedChanged: (paused: boolean) => void,
     ended: () => void,
     nextVideo: () => void,
+    avSyncObserved: (observation: AvSyncObservation) => void,
+    playbackHealthObserved: (observation: PlaybackHealthObservation) => void,
 ];
 
 export = usePlayer;
