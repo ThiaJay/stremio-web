@@ -1,0 +1,140 @@
+diff --git a/src/ShellVideo/AvSyncTelemetry.js b/src/ShellVideo/AvSyncTelemetry.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..97ecc3e0838a44ad760e7cfca06d6b2fdfaa29ef
+--- /dev/null
++++ b/src/ShellVideo/AvSyncTelemetry.js
+@@ -0,0 +1,57 @@
++// Native MPV timing telemetry. Correction remains owned by the native player.
++// No source URLs, media identifiers, device names, timers or network requests.
++function AvSyncTelemetry(clock) {
++    var now = clock || function() {
++        return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : NaN;
++    };
++    var session = 0;
++    var sequence = 0;
++    var lastObservedAt = null;
++    var lastPublishedAt = null;
++    var reading = null;
++
++    this.reset = function() {
++        reading = null;
++        lastObservedAt = null;
++        lastPublishedAt = null;
++        session = session < Number.MAX_SAFE_INTEGER ? session + 1 : session;
++    };
++
++    this.observe = function(seconds, active) {
++        var timestamp = now();
++        if (active !== true || typeof seconds !== 'number' || !Number.isFinite(seconds) ||
++            Math.abs(seconds) > 60 || !Number.isFinite(timestamp) || timestamp < 0 ||
++            (lastObservedAt !== null && timestamp < lastObservedAt) ||
++            sequence === Number.MAX_SAFE_INTEGER || session === Number.MAX_SAFE_INTEGER) {
++            var changed = reading !== null;
++            reading = null;
++            return changed;
++        }
++        lastObservedAt = timestamp;
++        if (lastPublishedAt !== null && timestamp - lastPublishedAt < 500) return false;
++        lastPublishedAt = timestamp;
++        sequence += 1;
++        reading = Object.freeze({
++            offsetMs: Math.round(seconds * 1000) || 0,
++            sampleId: sequence,
++            sessionId: session,
++            capturedAtMs: timestamp,
++            buffering: false,
++            seeking: false,
++            refreshRateSwitching: false,
++            canSoftCorrect: false,
++            canHardCorrect: false,
++            telemetryOnly: true
++        });
++        return true;
++    };
++
++    this.snapshot = function(active) {
++        var timestamp = now();
++        if (active !== true || reading === null || !Number.isFinite(timestamp) ||
++            timestamp < reading.capturedAtMs || timestamp - reading.capturedAtMs > 1500) return null;
++        return reading;
++    };
++}
++
++module.exports = AvSyncTelemetry;
+diff --git a/src/ShellVideo/ShellVideo.js b/src/ShellVideo/ShellVideo.js
+index c2946487b344479517e6564c564b2062d7fe4df2..185157d03db5e1578008a0f1a60cd832107ff71f 100644
+--- a/src/ShellVideo/ShellVideo.js
++++ b/src/ShellVideo/ShellVideo.js
+@@ -2,6 +2,7 @@ var EventEmitter = require('eventemitter3');
+ var cloneDeep = require('lodash.clonedeep');
+ var deepFreeze = require('deep-freeze');
+ var ERROR = require('../error');
++var AvSyncTelemetry = require('./AvSyncTelemetry');
+ 
+ var SUBS_SCALE_FACTOR = 0.0066;
+ var EOF_END_TOLERANCE = 60000;
+@@ -30,6 +31,7 @@ var stremioToMPVProps = {
+     'assSubtitlesStylingActive': null,
+     'hdrInfo': null,
+     'videoScale': null,
++    'avSync': null,
+ };
+ 
+ function parseVersion(version) {
+@@ -48,6 +50,8 @@ function ShellVideo(options) {
+     options = options || {};
+ 
+     var ipc = options.shellTransport;
++    var avSyncTelemetry = new AvSyncTelemetry();
++    var avSyncSeeking = true;
+     var observedProps = {};
+     var props = {};
+     var stremioProps = {};
+@@ -69,6 +73,7 @@ function ShellVideo(options) {
+     ipc.send('mpv-observe-prop', 'volume');
+     ipc.send('mpv-observe-prop', 'pause');
+     ipc.send('mpv-observe-prop', 'seeking');
++    ipc.send('mpv-observe-prop', 'avsync');
+     ipc.send('mpv-observe-prop', 'eof-reached');
+ 
+     ipc.send('mpv-observe-prop', 'duration');
+@@ -170,6 +175,16 @@ function ShellVideo(options) {
+ 
+     var last_time = 0;
+     ipc.on('mpv-prop-change', function(args) {
++        if (destroyed || !args) return;
++        if (args.name === 'seeking') avSyncSeeking = args.data !== false;
++        if (['path', 'pause', 'seeking', 'paused-for-cache', 'aid', 'vid', 'eof-reached'].indexOf(args.name) !== -1) {
++            avSyncTelemetry.reset();
++            onPropChanged('avSync');
++        }
++        if (args.name === 'avsync') {
++            if (avSyncTelemetry.observe(args.data, avSyncActive())) onPropChanged('avSync');
++            return;
++        }
+         switch (args.name) {
+             case 'mpv-version':
+                 resolveMPVVersion(args.data);
+@@ -348,7 +363,13 @@ function ShellVideo(options) {
+         }
+     });
+ 
++    function avSyncActive() {
++        return !destroyed && stream !== null && props.loaded === true &&
++            props.pause === false && props.buffering === false && !avSyncSeeking &&
++            typeof props.aid === 'string' && typeof props.vid === 'string';
++    }
+     function getProp(propName) {
++        if (propName === 'avSync') return avSyncTelemetry.snapshot(avSyncActive());
+         if (propName === 'hdrInfo') return props.hdrInfo || null;
+         if (propName === 'videoScale') return props.videoScale || 'contain';
+         if (propName === 'assSubtitlesStylingActive') return props.assSubtitlesStylingActive === true;
+@@ -577,6 +598,8 @@ function ShellVideo(options) {
+                 break;
+             }
+             case 'unload': {
++                avSyncTelemetry.reset();
++                onPropChanged('avSync');
+                 var wasASSSubtitlesStylingActive = props.assSubtitlesStylingActive === true;
+                 activeVideoReadyLoadId = null;
+                 props = {

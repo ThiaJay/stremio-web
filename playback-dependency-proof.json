@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "package": "@stremio/stremio-video",
+  "version": "0.0.98",
+  "upstream": "https://github.com/Stremio/stremio-video",
+  "licence": "MIT",
+  "sourceCommit": "963bf123db5c92fdc08f8a5b5fa75a4a280dd78e",
+  "shellBeforeSha256": "80b6680cdf0d6f3e927273bc407563fd1c9633705e93cf635d86c393a236ed50",
+  "shellAfterSha256": "74ce3c647056ed989a45045d866a0e6ffb070bcc5f31286e810d8c0078a46963",
+  "telemetrySha256": "b7ef572efdb89537cc3b8251a06e86b4e6bc2f2ee3dc3a9b52675a9edf0156fe",
+  "changedPackageFiles": [
+    "src/ShellVideo/ShellVideo.js",
+    "src/ShellVideo/AvSyncTelemetry.js"
+  ],
+  "nativeCorrectionsEnabled": false,
+  "productionDeployment": false
+}
