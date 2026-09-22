@@ -1,0 +1,45 @@
+# Playback backend integration
+
+22 September 2026
+
+## Development route
+
+Changes to the shared video dependency are carried as a version locked pnpm patch in this existing Web fork. No upstream repository permission, new repository or local computer control is needed. The original dependency integrity remains in the lockfile. pnpm generates the patch metadata and the resulting installation must pass the frozen lockfile check.
+
+The patch was materialised in commit 96feede8ba7e3116252b5c132cf62194f6a78819 after its generated files matched the exact privately reviewed hashes. Public preparation run 35694277148 passed frozen dependency installation, nine installed backend tests, the production build, all 95 existing Web tests and the existing lint gate. Existing lint and build warnings remain.
+
+The later reconciliation in commit e1c4ff1bbe617338dcaa2eef615c97c97e389240 preserves integration commit 149d17350e76f7f9b504298876a2024894353072 on the candidate branch. Its new Core locator resolves to the same verified package bytes and retains SHA 512 integrity. Run 35695050418 passed frozen installation, backend tests, the expanded Web suite, build and lint. The temporary reconciliation workflow is also retired, with its recipe preserved in commit 1633fd666af167861ec8308114ace7577cd3ccd6. The retained lockfile and acceptance workflow supersede that single use action.
+
+The temporary preparation workflow and scripts have been retired from the current tree. Their reproducible recipe is preserved in commit ca40816d347fb162a2632470ea9d4aeede97939d. The retained dependency patch and readonly native video acceptance workflow are their successors. No feature, test or recovery evidence is discarded.
+
+The acceptance workflow validates the installed dependency on Ubuntu, Windows and macOS. Patch line endings are fixed to LF to preserve the same content hash across checkouts. These jobs do not merge, deploy, change repository permissions or update the integration branch.
+
+## Implemented native lifecycle hardening
+
+The patch modifies the actual ShellVideo source from video package 0.0.98. Pending native loads are invalidated by a newer load, unload or destruction. Stream observations reflect the real selected source and clear on unload. Seeking and cache buffering remain independent reasons to suppress recovery. Late native events cannot revive a destroyed player.
+
+Tests execute that installed source with a simulated MPV transport. They are adapter behaviour tests, not physical playback acceptance and not audio codec decode tests. No unimplemented recovery or timing capability is advertised.
+
+## Android DTS path
+
+Stremio maintains a public Media3 library fork. Its FfmpegLibrary maps DTS and DTS HD to the dca decoder and supportsFormat checks that the decoder really exists in the native build.
+
+The proposed Android recovery should retain the normal hardware video renderer while selecting an FFmpeg audio renderer to produce compatible PCM after a verified audio failure. This does not require mixing ExoPlayer video with a separate VLC playback clock. It must preserve track intent, position and user audio settings and must not silently disable working passthrough on other routes.
+
+An audio renderer reporting activity does not prove a television or receiver is emitting sound. Missing observations are unknown rather than healthy. Normal silent scenes, mute, pauses, buffering and seeking must not trigger a false repair.
+
+The official Android TV application integration and a signed build are still required. A pnpm dependency patch changes only clients that consume that dependency. This work does not update an installed Android TV application and does not claim that the DTS incident has been fixed on a television.
+
+## Sources and lineage
+
+ThiaJay/stremio-development-foundation issue 17 retains the acceptance boundary.
+
+ThiaJay/stremio-web PR 10 remains the combined integration authority and is not modified by this candidate.
+
+https://github.com/Stremio/media/blob/stremio/libraries/decoder_ffmpeg/src/main/java/androidx/media3/decoder/ffmpeg/FfmpegLibrary.java
+
+https://developer.android.com/media/media3/exoplayer/supported-formats
+
+https://pnpm.io/cli/patch
+
+https://pnpm.io/cli/patch-commit
