@@ -33,8 +33,12 @@ jobs:
       - name: Prove missing APK fails before any device mutation
         shell: powershell
         run: |
+          $previousPreference = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
           $output = & powershell.exe -NoLogo -NoProfile -File .\android-dts\deploy\Deploy-StremioDtsFix.ps1 -Apk .\definitely-missing.apk 2>&1
-          if ($LASTEXITCODE -eq 0) { throw 'Missing APK unexpectedly succeeded' }
+          $exitCode = $LASTEXITCODE
+          $ErrorActionPreference = $previousPreference
+          if ($exitCode -eq 0) { throw 'Missing APK unexpectedly succeeded' }
           if (($output -join [Environment]::NewLine) -notmatch 'official app is left unchanged') {
             throw 'Expected fail closed message was not emitted'
           }
