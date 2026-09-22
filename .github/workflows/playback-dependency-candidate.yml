@@ -1,0 +1,102 @@
+name: Playback dependency candidate
+
+on:
+  push:
+    branches: [feat/playback-dependency-candidate]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playback-dependency-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install the locked released dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prepare the native player patch when not already installed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f node_modules/@stremio/stremio-video/src/ShellVideo/AvSyncTelemetry.js ]; then
+            pnpm patch @stremio/stremio-video@0.0.98 --edit-dir .player-dependency-work
+            node dependency-patches/stremio-video/prepare.cjs .player-dependency-work
+            pnpm patch-commit .player-dependency-work
+            rm -rf .player-dependency-work
+          fi
+      - name: Verify reproducible installation and installed native adapter
+        run: |
+          pnpm install --frozen-lockfile
+          node dependency-patches/stremio-video/prepare.cjs --verify-installed
+          node --test dependency-patches/stremio-video/telemetry.test.cjs
+      - name: Build
+        run: pnpm build
+      - name: Test
+        run: pnpm test --runInBand
+      - name: Lint
+        run: pnpm lint
+      - name: Retain the validated dependency inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: playback-dependency-inputs
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            patches/
+            package.json
+            pnpm-workspace.yaml
+            pnpm-lock.yaml
+            playback-dependency-proof.json
+
+  persist-validated-inputs:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/playback-dependency-candidate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: playback-dependency-inputs
+      - name: Preserve only validated inputs on the same isolated branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          current="$(gh api repos/ThiaJay/stremio-web/git/ref/heads/feat/playback-dependency-candidate --jq .object.sha)"
+          test "$current" = "$EXPECTED_SHA" || { echo 'Branch moved and will not be overwritten'; exit 1; }
+          git add -- patches package.json pnpm-workspace.yaml pnpm-lock.yaml playback-dependency-proof.json
+          node - <<'NODE'
+          const { execFileSync } = require('node:child_process');
+          const names = execFileSync('git', ['diff', '--cached', '--name-only', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+          const allowed = new Set(['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'playback-dependency-proof.json']);
+          for (const name of names) {
+            if (!allowed.has(name) && !/^patches\/[A-Za-z0-9_@.+-]+\.patch$/.test(name)) throw new Error('Unexpected generated path');
+          }
+          NODE
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Lock validated native playback dependency patch'
+          git -c credential.helper='!gh auth git-credential' push origin HEAD:refs/heads/feat/playback-dependency-candidate
