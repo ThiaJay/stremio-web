@@ -1,0 +1,2 @@
+# Preserve the validated dependency patch bytes on every platform.
+patches/stremio_video_0_0_98.patch text eol=lf
