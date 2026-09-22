@@ -13,6 +13,7 @@ declare const usePlayer: (urlParams: UrlParams) => [
     ended: () => void,
     nextVideo: () => void,
     avSyncObserved: (observation: AvSyncObservation) => void,
+    playbackHealthObserved: (observation: PlaybackHealthObservation) => void,
 ];
 
 export = usePlayer;
