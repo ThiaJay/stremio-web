@@ -157,6 +157,8 @@ const Player = () => {
         segment: skipSegment,
         target: skipSegmentTarget,
         dismissal: skipSegmentPopupDismissal,
+        paused: video.state.paused,
+        nextVideoPopupOpen,
     });
 
     const [sideDrawerOpen, , closeSideDrawer, toggleSideDrawer] = useBinaryState(false);
@@ -372,11 +374,11 @@ const Player = () => {
     }, [skipSegment, core.transport]);
 
     const onSkipSegmentRequested = React.useCallback(() => {
-        if (skipSegmentTarget !== null) {
+        if (skipSegmentTarget !== null && !nextVideoPopupOpen) {
             onDismissSkipSegmentPopup();
             commitSeek(skipSegmentTarget);
         }
-    }, [skipSegmentTarget, onDismissSkipSegmentPopup, commitSeek]);
+    }, [skipSegmentTarget, nextVideoPopupOpen, onDismissSkipSegmentPopup, commitSeek]);
 
     React.useEffect(() => {
         if (autoSkipSegment) {
