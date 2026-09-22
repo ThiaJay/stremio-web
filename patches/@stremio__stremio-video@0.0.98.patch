@@ -62,7 +62,7 @@ index 0000000000000000000000000000000000000000..97ecc3e0838a44ad760e7cfca06d6b2f
 +
 +module.exports = AvSyncTelemetry;
 diff --git a/src/ShellVideo/ShellVideo.js b/src/ShellVideo/ShellVideo.js
-index c2946487b344479517e6564c564b2062d7fe4df2..185157d03db5e1578008a0f1a60cd832107ff71f 100644
+index c2946487b344479517e6564c564b2062d7fe4df2..9e57472cca8e282e1c0771506220b9b72c1f8127 100644
 --- a/src/ShellVideo/ShellVideo.js
 +++ b/src/ShellVideo/ShellVideo.js
 @@ -2,6 +2,7 @@ var EventEmitter = require('eventemitter3');
@@ -115,13 +115,14 @@ index c2946487b344479517e6564c564b2062d7fe4df2..185157d03db5e1578008a0f1a60cd832
          switch (args.name) {
              case 'mpv-version':
                  resolveMPVVersion(args.data);
-@@ -348,7 +363,13 @@ function ShellVideo(options) {
+@@ -348,7 +363,14 @@ function ShellVideo(options) {
          }
      });
  
 +    function avSyncActive() {
 +        return !destroyed && stream !== null && props.loaded === true &&
 +            props.pause === false && props.buffering === false && !avSyncSeeking &&
++            props['paused-for-cache'] === false && props['eof-reached'] !== true &&
 +            typeof props.aid === 'string' && typeof props.vid === 'string';
 +    }
      function getProp(propName) {
@@ -129,7 +130,7 @@ index c2946487b344479517e6564c564b2062d7fe4df2..185157d03db5e1578008a0f1a60cd832
          if (propName === 'hdrInfo') return props.hdrInfo || null;
          if (propName === 'videoScale') return props.videoScale || 'contain';
          if (propName === 'assSubtitlesStylingActive') return props.assSubtitlesStylingActive === true;
-@@ -577,6 +598,8 @@ function ShellVideo(options) {
+@@ -577,6 +599,8 @@ function ShellVideo(options) {
                  break;
              }
              case 'unload': {
