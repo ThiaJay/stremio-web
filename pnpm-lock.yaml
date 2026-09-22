@@ -1428,7 +1428,7 @@ packages:
     resolution: {integrity: sha512-dYlPgu9W/H7c9s1zmW5tiDnRenaUa4Hg1QCyOg1lhOcgSfM/bVTi5nnqX+IfvGTTUNA0zgzh8hI3o3miwnZxTg==}
 
   '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/1671bfff470c32449b147240235a1b90cec2a5af/stremio-core-web/feat/automatic-av-sync-core/dev/stremio-stremio-core-web-0.63.1.tgz':
-    resolution: {integrity: sha512-6Qc1igja+yYwY27iEyAXWc6lYqpzTckfPShfJ9cdUtXV77olAig4/zkCEKqL44q/mxDFyrV4FAl/5D7yHHGcEw==, tarball: https://raw.githubusercontent.com/ThiaJay/stremio-core/1671bfff470c32449b147240235a1b90cec2a5af/stremio-core-web/feat/automatic-av-sync-core/dev/stremio-stremio-core-web-0.63.1.tgz}
+    resolution: {integrity: sha512-+HVrw10o+tll6AGkmpwpI3i62SCC7CtCf241Zh1u+iYMQ2lrl+GBbbPdHVxbUV7DXQAOSlE3ga1q9NDVssLxBg==, tarball: https://raw.githubusercontent.com/ThiaJay/stremio-core/1671bfff470c32449b147240235a1b90cec2a5af/stremio-core-web/feat/automatic-av-sync-core/dev/stremio-stremio-core-web-0.63.1.tgz}
     version: 0.63.1
 
   '@stremio/stremio-icons@5.15.0':
