@@ -30,7 +30,7 @@ describe('getSkipSegmentTarget', () => {
         expect(getSkipSegmentTarget({
             ...valid,
             segment: { ...segment, kind },
-        })).toBe(244500);
+        })).toBe(244.5);
     });
 
     test.each([
@@ -77,7 +77,7 @@ describe('getSkipSegmentTarget', () => {
 describe('getSkipSegmentPopupOpen', () => {
     const state = {
         segment,
-        target: segment.to,
+        target: segment.to / 1000,
         nextVideoPopupOpen: false,
         dismissal: null,
     };
@@ -123,16 +123,37 @@ describe('shouldAutoSkipSegment', () => {
     test.each(['intro', 'recap', 'outro'])('auto skips a trusted active %s once', (kind) => {
         expect(shouldAutoSkipSegment({
             segment: { ...automatic, kind },
-            target: automatic.to,
+            target: automatic.to / 1000,
             dismissal: null,
+            paused: false,
+            nextVideoPopupOpen: false,
         })).toBe(true);
     });
 
     test.each(['ask', 'never'])('does not auto skip in %s mode', (mode) => {
         expect(shouldAutoSkipSegment({
             segment: { ...automatic, mode },
-            target: automatic.to,
+            target: automatic.to / 1000,
             dismissal: null,
+            paused: false,
+            nextVideoPopupOpen: false,
+        })).toBe(false);
+    });
+
+    test('does not auto skip while paused or while Next Episode has priority', () => {
+        expect(shouldAutoSkipSegment({
+            segment: automatic,
+            target: automatic.to / 1000,
+            dismissal: null,
+            paused: true,
+            nextVideoPopupOpen: false,
+        })).toBe(false);
+        expect(shouldAutoSkipSegment({
+            segment: automatic,
+            target: automatic.to / 1000,
+            dismissal: null,
+            paused: false,
+            nextVideoPopupOpen: true,
         })).toBe(false);
     });
 
@@ -145,8 +166,10 @@ describe('shouldAutoSkipSegment', () => {
         };
         expect(shouldAutoSkipSegment({
             segment: automatic,
-            target: automatic.to,
+            target: automatic.to / 1000,
             dismissal,
+            paused: false,
+            nextVideoPopupOpen: false,
         })).toBe(false);
     });
 });
