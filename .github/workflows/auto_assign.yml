@@ -13,7 +13,7 @@ jobs:
     steps:
       # Auto assign PR to author
       - name: Auto Assign PR to Author
-        if: github.event.pull_request.head.repo.fork == false && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
         uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -31,7 +31,7 @@ jobs:
 
       # Dynamic labeling based on PR/Issue title
       - name: Label PRs and Issues
-        if: github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]'
+        if: (github.event_name == 'issues' || github.event.pull_request.head.repo.full_name == github.repository) && github.actor != 'dependabot[bot]'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: actions/github-script@v9
