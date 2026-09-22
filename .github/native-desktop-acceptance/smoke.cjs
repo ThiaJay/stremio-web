@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 
 (async () => {
   const endpoint = process.env.CDP_ENDPOINT || 'http://127.0.0.1:9222';
