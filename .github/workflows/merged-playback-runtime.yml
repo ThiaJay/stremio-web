@@ -1,0 +1,84 @@
+name: Merged playback runtime acceptance
+on:
+  push:
+    branches:
+      - acceptance/unified-playback-runtime
+permissions:
+  contents: read
+concurrency:
+  group: merged-playback-runtime
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout Web acceptance branch
+        uses: actions/checkout@v7
+      - name: Checkout merged Core development
+        uses: actions/checkout@v7
+        with:
+          repository: ThiaJay/stremio-core
+          ref: development
+          path: core
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95'
+          targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2.87.11
+        with:
+          tool: wasm-pack@0.14.0
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Build merged Core Web package
+        working-directory: core/stremio-core-web
+        run: |
+          npm ci
+          npm run build-dev
+          npm pack
+      - name: Build merged Web against merged Core
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          CORE_TGZ="$(find core/stremio-core-web -maxdepth 1 -name '*.tgz' -print -quit)"
+          test -n "$CORE_TGZ"
+          pnpm add --ignore-workspace-root-check "$CORE_TGZ"
+          pnpm build
+          pnpm exec jest --runInBand
+          pnpm lint
+      - name: Prepare lawful local media and browsers
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y ffmpeg
+          ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=black:s=320x180:r=15 -f lavfi -i sine=frequency=440:sample_rate=44100 -t 120 -c:v libvpx -deadline realtime -c:a libvorbis build/fixture.webm
+          npm install --prefix .github/playback-runtime --no-audit --no-fund playwright@1.58.2
+          cd .github/playback-runtime
+          npx playwright install --with-deps chromium firefox
+      - name: Exercise merged player and Core runtime
+        run: |
+          set -o pipefail
+          mkdir -p receipts/runtime
+          node .github/playback-runtime/runtime.cjs build receipts/runtime 2>&1 | tee receipts/runtime.log
+      - name: Record source binding
+        if: always()
+        run: |
+          mkdir -p receipts
+          printf 'web_commit %s\ncore_commit %s\nrun %s\n' "$GITHUB_SHA" "$(git -C core rev-parse HEAD)" "$GITHUB_RUN_ID" > receipts/SOURCE.txt
+          sha256sum .github/playback-runtime/runtime.cjs > receipts/HARNESS_SHA256.txt
+      - name: Upload runtime receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-playback-runtime-receipt
+          path: receipts/
+          retention-days: 7
+          if-no-files-found: error
