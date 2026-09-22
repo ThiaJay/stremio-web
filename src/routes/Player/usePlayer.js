@@ -185,6 +185,18 @@ const usePlayer = (urlParams) => {
         }
     }, []);
 
+    const playbackHealthObserved = React.useCallback((observation) => {
+        if (observation !== null && typeof observation === 'object') {
+            return core.transport.dispatch({
+                action: 'Player',
+                args: {
+                    action: 'PlaybackHealthObserved',
+                    args: { observation },
+                },
+            }, 'player');
+        }
+    }, []);
+
     const audioPreferenceChanged = React.useCallback((preference) => {
         return core.transport.dispatch({
             action: 'Player',
@@ -215,7 +227,7 @@ const usePlayer = (urlParams) => {
         }, 'player');
     }, []);
 
-    return [player, videoParamsChanged, streamStateChanged, audioPreferenceChanged, subtitlePreferenceChanged, videoScaleChanged, timeChanged, seek, pausedChanged, ended, nextVideo, avSyncObserved];
+    return [player, videoParamsChanged, streamStateChanged, audioPreferenceChanged, subtitlePreferenceChanged, videoScaleChanged, timeChanged, seek, pausedChanged, ended, nextVideo, avSyncObserved, playbackHealthObserved];
 };
 
 module.exports = usePlayer;
