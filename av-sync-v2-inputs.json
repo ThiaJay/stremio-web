@@ -1,10 +1,11 @@
 {
   "protocolVersion": 2,
-  "coreSourceCommit": "dd55e42fdfbe5f20dbab5fb4d7c6af45cfd82eb6",
-  "coreBuildRun": 35693988227,
-  "corePackageCommit": "9df9571400bfe5d244c3408018d641c405668d2f",
+  "coreSourceCommit": "87b2ba2ab75f02e283170f1fc8a93a21ce7b0b59",
+  "coreBuildRun": 35695477192,
+  "corePackageCommit": "365d7c521a92520da4495d111ff0bad7ebef87d8",
   "videoCommit": "6af2c1c3cef7342b0a0df1cc496cb5872cfdda26",
   "videoValidationRun": 35693948055,
+  "videoEngineContractRun": 35694788330,
   "productionDeployment": false,
   "officialAndroidTvIntegrated": false
 }

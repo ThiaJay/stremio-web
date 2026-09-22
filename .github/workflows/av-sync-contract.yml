@@ -18,10 +18,21 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Resolve the exact validated Core source
+        id: inputs
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          inputs = json.load(open('av-sync-v2-inputs.json'))
+          ref = inputs['coreSourceCommit']
+          assert re.fullmatch(r'[a-f0-9]{40}', ref), 'An immutable Core commit is required'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('core_ref=' + ref + '\n')
+          PY
       - uses: actions/checkout@v7
         with:
           repository: ThiaJay/stremio-core
-          ref: dd55e42fdfbe5f20dbab5fb4d7c6af45cfd82eb6
+          ref: ${{ steps.inputs.outputs.core_ref }}
           path: .contract-core
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@1.85
@@ -40,6 +51,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: pnpm install --frozen-lockfile
+      - name: Install and verify the exact candidate dependencies
+        run: |
+          node scripts/integrate-av-sync-v2.cjs
+          pnpm install --no-frozen-lockfile
+          pnpm install --frozen-lockfile
       - name: Test native observation through Core and back to native recovery
         run: node tests/av-sync-contract/roundtrip.cjs
