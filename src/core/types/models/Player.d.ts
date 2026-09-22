@@ -129,6 +129,7 @@ type Player = {
     subtitlePreference: SubtitlePreference | null,
     videoScale: VideoScale | null,
     avSync: AvSyncState,
+    avSyncV2?: AvSyncV2Controller,
     playbackHealth: PlaybackHealthState,
     subtitles: Subtitle[],
     title: string | null,

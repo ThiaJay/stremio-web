@@ -24,6 +24,8 @@ const useVideo = () => {
         playbackSpeed: null,
         videoScale: null,
         avSync: null,
+        avSyncV2: null,
+        avSyncV2Ack: null,
         playbackHealth: null,
         videoParams: null,
         hdrInfo: null,
@@ -62,6 +64,7 @@ const useVideo = () => {
     }, []);
 
     const load = React.useCallback((args, options) => {
+        setState((state) => ({ ...state, avSyncV2: null, avSyncV2Ack: null }));
         dispatch({
             type: 'command',
             commandName: 'load',
@@ -70,6 +73,7 @@ const useVideo = () => {
     }, [dispatch]);
 
     const unload = React.useCallback(() => {
+        setState((state) => ({ ...state, avSyncV2: null, avSyncV2Ack: null }));
         dispatch({
             type: 'command',
             commandName: 'unload',
@@ -165,6 +169,10 @@ const useVideo = () => {
         setProp('fullscreen', state);
     }, [setProp]);
 
+    const correctAvSyncV2 = React.useCallback((request) => {
+        dispatch({ type: 'command', commandName: 'correctAvSyncV2', commandArgs: request });
+    }, [dispatch]);
+
     const correctAvSync = React.useCallback((correction) => {
         dispatch({
             type: 'command',
@@ -227,6 +235,8 @@ const useVideo = () => {
         setState((state) => ({
             ...state,
             manifest,
+            avSyncV2: null,
+            avSyncV2Ack: null,
             live: null,
         }));
         manifest.props.forEach((propName) => dispatch(({ type: 'observeProp', propName })));
@@ -282,6 +292,7 @@ const useVideo = () => {
         setVideoScale,
         setFullscreen,
         correctAvSync,
+        correctAvSyncV2,
         recoverPlayback,
     };
 };

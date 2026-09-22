@@ -35,6 +35,7 @@ const { default: useKeyboardSeek } = require('./useKeyboardSeek');
 const { default: usePlaybackSpeedHold } = require('./usePlaybackSpeedHold');
 const { default: useStatistics } = require('./useStatistics');
 const useVideo = require('./useVideo');
+const useAvSyncV2 = require('./useAvSyncV2');
 const { default: useAudio } = require('./useAudio');
 const { default: useSubtitles } = require('./useSubtitles');
 const styles = require('./styles');
@@ -79,6 +80,7 @@ const Player = () => {
     const discordTimestamps = React.useRef(EMPTY_DISCORD_TIMESTAMPS);
 
     const [seeking, setSeeking] = React.useState(false);
+    useAvSyncV2(core, player, video, seeking);
 
     const appliedAvSyncCorrection = React.useRef({ stream: null, generation: 0 });
 
@@ -634,6 +636,7 @@ const Player = () => {
 
         if (player.selected && player.stream?.type === 'Ready' && streamingServer.settings?.type !== 'Loading') {
             video.load({
+                avSyncSessionId: player.avSyncV2?.protocolVersion === 2 ? player.avSyncV2.sessionId : undefined,
                 stream: {
                     ...player.stream.content,
                     subtitles: streamSubtitles
@@ -666,7 +669,7 @@ const Player = () => {
                 shellTransport: platform.shell.active ? platform.shell : null,
             });
         }
-    }, [streamingServer.baseUrl, player.selected, player.stream, streamSubtitles, forceTranscoding, casting, cancelKeyboardSeek]);
+    }, [streamingServer.baseUrl, player.selected, player.stream, streamSubtitles, forceTranscoding, casting, cancelKeyboardSeek, player.avSyncV2?.sessionId]);
 
     React.useEffect(() => {
         !seeking && timeChanged(video.state.time, video.state.duration, video.state.manifest?.name);
