@@ -24,6 +24,7 @@ const useVideo = () => {
         playbackSpeed: null,
         videoScale: null,
         avSync: null,
+        playbackHealth: null,
         videoParams: null,
         hdrInfo: null,
         audioTracks: [],
@@ -172,6 +173,14 @@ const useVideo = () => {
         });
     }, [dispatch]);
 
+    const recoverPlayback = React.useCallback((recovery) => {
+        dispatch({
+            type: 'command',
+            commandName: 'recoverPlayback',
+            commandArgs: recovery,
+        });
+    }, [dispatch]);
+
     const setSubtitlesTextColor = React.useCallback((color) => {
         setProp('subtitlesTextColor', color);
         setProp('extraSubtitlesTextColor', color);
@@ -273,6 +282,7 @@ const useVideo = () => {
         setVideoScale,
         setFullscreen,
         correctAvSync,
+        recoverPlayback,
     };
 };
 
