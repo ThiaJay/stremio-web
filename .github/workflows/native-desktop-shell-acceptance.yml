@@ -23,15 +23,18 @@ jobs:
       - name: Checkout exact Web candidate
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Verify product parent binding
+      - name: Verify product source binding
         shell: bash
         run: |
           set -euo pipefail
-          PRODUCT_PARENT="$(git rev-parse HEAD~2)"
-          test "$PRODUCT_PARENT" = "0ae947555fbb9da757d640e4179073063636a26e"
-          printf 'web_product_commit %s\nvalidation_commit %s\n' "$PRODUCT_PARENT" "$(git rev-parse HEAD)" > source-binding.txt
+          PRODUCT_COMMIT='0ae947555fbb9da757d640e4179073063636a26e'
+          git cat-file -e "${PRODUCT_COMMIT}^{commit}"
+          git diff --quiet "$PRODUCT_COMMIT" HEAD -- \
+            ':(exclude).github/native-desktop-acceptance/**' \
+            ':(exclude).github/workflows/native-desktop-shell-acceptance.yml'
+          printf 'web_product_commit %s\nvalidation_commit %s\n' "$PRODUCT_COMMIT" "$(git rev-parse HEAD)" > source-binding.txt
 
       - name: Install pnpm and Node
         uses: pnpm/action-setup@v6.1.0
@@ -107,6 +110,7 @@ jobs:
         if: always()
         shell: bash
         run: |
+          mkdir -p native-desktop-receipt
           {
             cat source-binding.txt 2>/dev/null || true
             printf 'run %s\n' "$GITHUB_RUN_ID"
