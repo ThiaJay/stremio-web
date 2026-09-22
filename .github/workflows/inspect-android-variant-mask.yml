@@ -1,0 +1,52 @@
+name: Inspect Android TV variant mask failure
+
+on:
+  push:
+    branches:
+      - fix/android-source-transition-variant-mask
+    paths:
+      - .github/workflows/inspect-android-variant-mask.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download immutable official Android TV APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/stremio.apk https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          echo 'dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423  /tmp/apktool.jar' | sha256sum -c -
+      - name: Decode and locate exact runtime error
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -jar /tmp/apktool.jar d -f --no-res -o /tmp/decoded /tmp/stremio.apk >/dev/null
+          mkdir -p out
+          {
+            echo '=== Exact phrase ==='
+            grep -RniF --binary-files=text 'No valid variant mask found' /tmp/decoded || true
+            echo
+            echo '=== Nearby variant-mask phrases ==='
+            grep -RniE --binary-files=text 'variant.{0,20}mask|mask.{0,20}variant' /tmp/decoded || true
+            echo
+            echo '=== IllegalStateException construction near matches ==='
+            grep -RniF --binary-files=text 'Ljava/lang/IllegalStateException;' /tmp/decoded | head -n 500 || true
+          } | tee out/search.txt
+          if ! grep -qF 'No valid variant mask found' out/search.txt; then
+            echo 'Exact phrase was not present in decoded dex text.' | tee -a out/search.txt
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-variant-mask-inspection
+          path: out/search.txt
+          if-no-files-found: error
+          retention-days: 14
