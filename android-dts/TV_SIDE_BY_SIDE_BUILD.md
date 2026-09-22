@@ -37,3 +37,34 @@ The Windows installation kit verifies the patched APK checksum, uses ADB install
 ## Acceptance boundary
 
 Automated build acceptance is complete. Physical device acceptance remains the final runtime check because no authorised device transport is available in this session. The side by side design makes that check reversible without altering the official Stremio installation.
+
+
+## ARM64 build
+
+Public workflow run 35732000098 completed successfully.
+
+Official ARM64 source APK SHA 256
+
+caaf4faba423a47c3174eda08b94057956ce32af616c6377b3485f4f5dec993c
+
+Patched ARM64 APK SHA 256
+
+ec0013335503b54d9582aaee0d8cf2c1e52bd46340dd7277d2862415aa39a293
+
+Workflow artifact ID
+
+10695084826
+
+Workflow artifact digest
+
+sha256:9d3ad41e7bc94d1c80582f73015310ae6626169a7cf1596274eb4fcc862a586d
+
+Both ARM and ARM64 builds use the same bounded side by side identity patch and the same audio-only NextRenderersFactory branch change. Both rebuild, sign and package verification gates passed.
+
+## Combined local installer
+
+The conversation delivery kit contains both APKs and selects the APK from the connected TV's Android userspace ABI.
+
+Combined ZIP SHA 256
+
+9f613069908e3752c79d305c94d8c10125f6820587cbee9d3fe64aea9e356cf6
