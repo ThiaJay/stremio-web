@@ -254,7 +254,7 @@ const Player = () => {
         const transition = getEndPlaybackTransition({
             isEpg,
             hasNextVideo: player.nextVideo !== null,
-            hasPlayableNextVideo: player.nextVideo?.deepLinks?.player != null,
+            hasPlayableNextVideo: Boolean(player.nextVideo?.deepLinks?.player),
             bingeWatching: profile.settings.bingeWatching,
         });
 
