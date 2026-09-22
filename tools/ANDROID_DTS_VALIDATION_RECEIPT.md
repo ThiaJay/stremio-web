@@ -69,3 +69,16 @@ The shipped Stremio Android TV 1.10.4 application also contains a real MPV playe
 ## Remaining external boundary
 
 The recovery candidate cannot replace the installed official Android TV application until it is integrated into an Android application build signed compatibly with the installed Stremio package. The deployment tooling deliberately does not bypass Android signature security.
+
+
+## Fast compile gate
+
+Workflow run
+
+35713049586
+
+Result
+
+success
+
+This gate reapplies the immutable NextLib backport and compiles the Stremio DTS recovery Kotlin sources without rebuilding native FFmpeg. It exists to catch integration mistakes quickly while the full native build remains the authoritative end to end library validation.
