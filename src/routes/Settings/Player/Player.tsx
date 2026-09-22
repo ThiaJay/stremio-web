@@ -25,6 +25,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
         seekShortTimeDurationSelect,
         playInExternalPlayerSelect,
         nextVideoPopupDurationSelect,
+        skipSegmentModeSelect,
         bingeWatchingToggle,
         playInBackgroundToggle,
         hardwareDecodingToggle,
@@ -119,6 +120,15 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                     <MultiselectMenu
                         className={'multiselect'}
                         {...nextVideoPopupDurationSelect}
+                    />
+                </Option>
+                <Option
+                    label={'PLAYER_SKIP_SEGMENTS'}
+                    labelDefault={'Skip intros, recaps and credits'}
+                >
+                    <MultiselectMenu
+                        className={'multiselect'}
+                        {...skipSegmentModeSelect}
                     />
                 </Option>
             </Category>
