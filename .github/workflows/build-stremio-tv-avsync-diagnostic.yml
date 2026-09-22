@@ -2,9 +2,11 @@ name: Build Fire TV AV sync diagnostic APK
 
 on:
   push:
-    branches: [android/tv-side-by-side-dts]
+    branches:
+      - android/tv-side-by-side-dts
     paths:
       - .github/workflows/build-stremio-tv-avsync-diagnostic.yml
+      - android-dts/avsync-diagnostic/**
   workflow_dispatch:
 
 permissions:
@@ -16,142 +18,24 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Download exact official APK and pinned Apktool
+
+      - name: Download immutable inputs
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
-            -o /tmp/stremio.apk \
-            https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/stremio.apk https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
           echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
-            -o /tmp/apktool.jar \
-            https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
           echo 'dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423  /tmp/apktool.jar' | sha256sum -c -
-      - name: Decode official APK
-        run: java -jar /tmp/apktool.jar d -f -o /tmp/decoded /tmp/stremio.apk
-      - name: Apply side by side DTS fix and AV sync probe
+
+      - name: Decode and patch
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          root=Path('/tmp/decoded')
-          manifest=root/'AndroidManifest.xml'
-          text=manifest.read_text()
-          reps={
-            'package="com.stremio.one"':'package="com.stremio.avsync"',
-            'com.stremio.one.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION':'com.stremio.avsync.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
-            'android:label="@string/app_name"':'android:label="Stremio AV Sync Test"',
-            'android:authorities="com.stremio.one.content"':'android:authorities="com.stremio.avsync.content"',
-            'android:authorities="com.stremio.one.firebaseinitprovider"':'android:authorities="com.stremio.avsync.firebaseinitprovider"',
-            'android:authorities="com.stremio.one.androidx-startup"':'android:authorities="com.stremio.avsync.androidx-startup"',
-          }
-          for old,new in reps.items():
-              if old not in text: raise SystemExit(f'Manifest anchor missing: {old}')
-              text=text.replace(old,new)
-          manifest.write_text(text)
+          java -jar /tmp/apktool.jar d -f -o /tmp/decoded /tmp/stremio.apk
+          python android-dts/avsync-diagnostic/patch_avsync_apk.py /tmp/decoded
 
-          nr=list(root.glob('smali*/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory.smali'))
-          if len(nr)!=1: raise SystemExit(f'Expected one NextRenderersFactory, found {len(nr)}')
-          smali=nr[0]
-          code=smali.read_text()
-          start=code.index('.method protected buildAudioRenderers')
-          end=code.index('.end method',start)+len('.end method')
-          method=code[start:end]
-          old='    if-ne p2, p3, :cond_1'
-          new='    if-ne p2, p2, :cond_1'
-          if method.count(old)!=1: raise SystemExit('Audio renderer anchor changed')
-          code=code[:start]+method.replace(old,new)+code[end:]
-          smali.write_text(code)
-
-          companions=list(root.glob('smali*/com/stremio/common/players/ExoPlayer$Companion.smali'))
-          if len(companions)!=1: raise SystemExit(f'Expected one ExoPlayer Companion, found {len(companions)}')
-          cp=companions[0]
-          c=cp.read_text()
-          marker='.method public final createPlayer('
-          s=c.find(marker)
-          if s<0: raise SystemExit('createPlayer method not found in Companion')
-          e=c.find('.end method',s)
-          method=c[s:e]
-          lines=method.splitlines()
-          out=[]
-          injected=0
-          for line in lines:
-              if line.startswith('    return-object '):
-                  reg=line.split()[-1]
-                  out += [
-                    '',
-                    '    new-instance v0, Lcom/stremio/common/players/AvSyncProbe;',
-                    f'    invoke-direct {{v0, {reg}}}, Lcom/stremio/common/players/AvSyncProbe;-><init>(Landroidx/media3/exoplayer/ExoPlayer;)V',
-                    f'    invoke-interface {{{reg}, v0}}, Landroidx/media3/exoplayer/ExoPlayer;->setVideoFrameMetadataListener(Landroidx/media3/exoplayer/video/VideoFrameMetadataListener;)V',
-                    ''
-                  ]
-                  injected += 1
-              out.append(line)
-          if injected < 1: raise SystemExit('No createPlayer return path found for probe')
-          c=c[:s]+'\n'.join(out)+c[e:]
-          cp.write_text(c)
-
-          probe=cp.parent/'AvSyncProbe.smali'
-          probe.write_text(r'''.class public final Lcom/stremio/common/players/AvSyncProbe;
-.super Ljava/lang/Object;
-.source "AvSyncProbe.java"
-
-.implements Landroidx/media3/exoplayer/video/VideoFrameMetadataListener;
-
-.field private final player:Landroidx/media3/exoplayer/ExoPlayer;
-.field private count:I
-
-.method public constructor <init>(Landroidx/media3/exoplayer/ExoPlayer;)V
-    .locals 1
-    invoke-direct {p0}, Ljava/lang/Object;-><init>()V
-    iput-object p1, p0, Lcom/stremio/common/players/AvSyncProbe;->player:Landroidx/media3/exoplayer/ExoPlayer;
-    const/4 v0, 0x0
-    iput v0, p0, Lcom/stremio/common/players/AvSyncProbe;->count:I
-    return-void
-.end method
-
-.method public onVideoFrameAboutToBeRendered(JJLandroidx/media3/common/Format;Landroid/media/MediaFormat;)V
-    .locals 8
-    iget v0, p0, Lcom/stremio/common/players/AvSyncProbe;->count:I
-    add-int/lit8 v0, v0, 0x1
-    iput v0, p0, Lcom/stremio/common/players/AvSyncProbe;->count:I
-    rem-int/lit8 v0, v0, 0x1e
-    if-nez v0, :done
-
-    iget-object v0, p0, Lcom/stremio/common/players/AvSyncProbe;->player:Landroidx/media3/exoplayer/ExoPlayer;
-    invoke-interface {v0}, Landroidx/media3/exoplayer/ExoPlayer;->getCurrentPosition()J
-    move-result-wide v0
-
-    const-wide/16 v2, 0x3e8
-    div-long v4, p1, v2
-    sub-long v6, v4, v0
-
-    new-instance v2, Ljava/lang/StringBuilder;
-    invoke-direct {v2}, Ljava/lang/StringBuilder;-><init>()V
-    const-string v3, "positionMs="
-    invoke-virtual {v2, v3}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    invoke-virtual {v2, v0, v1}, Ljava/lang/StringBuilder;->append(J)Ljava/lang/StringBuilder;
-    const-string v0, " framePtsMs="
-    invoke-virtual {v2, v0}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    invoke-virtual {v2, v4, v5}, Ljava/lang/StringBuilder;->append(J)Ljava/lang/StringBuilder;
-    const-string v0, " deltaMs="
-    invoke-virtual {v2, v0}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    invoke-virtual {v2, v6, v7}, Ljava/lang/StringBuilder;->append(J)Ljava/lang/StringBuilder;
-    invoke-virtual {v2}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
-    move-result-object v0
-
-    const-string v1, "STREMIO_AVSYNC"
-    invoke-static {v1, v0}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I
-
-    :done
-    return-void
-.end method
-''')
-          print('Injected AV sync probe into',cp)
-          PY
-      - name: Rebuild and sign diagnostic APK
+      - name: Rebuild and sign
         shell: bash
         run: |
           set -euo pipefail
@@ -162,67 +46,18 @@ jobs:
           "$build_tools/apksigner" sign --ks /tmp/avsync.jks --ks-pass pass:changeit --key-pass pass:changeit --out /tmp/Stremio-AV-Sync-Test-arm.apk /tmp/aligned.apk
           "$build_tools/apksigner" verify --verbose --print-certs /tmp/Stremio-AV-Sync-Test-arm.apk
           "$build_tools/aapt" dump badging /tmp/Stremio-AV-Sync-Test-arm.apk | grep -F "package: name='com.stremio.avsync'"
-      - name: Create automated capture and analysis kit
+
+      - name: Package diagnostic kit
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
           cp /tmp/Stremio-AV-Sync-Test-arm.apk dist/
+          cp android-dts/avsync-diagnostic/CAPTURE_SYNC.ps1 dist/
+          cp android-dts/avsync-diagnostic/RUN_SYNC_TEST.cmd dist/
+          cp android-dts/avsync-diagnostic/README.txt dist/
           sha256sum dist/Stremio-AV-Sync-Test-arm.apk > dist/SHA256SUMS.txt
-          cat > dist/CAPTURE_SYNC.ps1 <<'PS'
-          param([string]$FireTvIp="192.168.0.144",[int]$Seconds=180)
-          $ErrorActionPreference='Stop'
-          $adbCmd=Get-Command adb.exe -ErrorAction SilentlyContinue
-          $adb=$null
-          if($adbCmd){$adb=$adbCmd.Source}
-          if(-not $adb){
-            $local=Join-Path $PSScriptRoot 'platform-tools\adb.exe'
-            if(Test-Path $local){$adb=$local}
-          }
-          if(-not $adb){throw 'adb.exe not found. Run the Fire TV installer first or place platform-tools beside this script.'}
-          $serial=$FireTvIp + ':5555'
-          & $adb connect $serial | Out-Null
-          & $adb -s $serial logcat -c
-          Write-Host "Start the DTS-HD MA test stream in Stremio AV Sync Test now. Capturing for $Seconds seconds..."
-          $job=Start-Job -ScriptBlock { param($a,$s) & $a -s $s logcat -v epoch STREMIO_AVSYNC:I '*:S' } -ArgumentList $adb,$serial
-          Start-Sleep -Seconds $Seconds
-          Stop-Job $job
-          $lines=Receive-Job $job
-          Remove-Job $job
-          $out=Join-Path $PSScriptRoot ("avsync-"+(Get-Date -Format 'yyyyMMdd-HHmmss')+".log")
-          $lines | Set-Content $out
-          $deltas=@()
-          foreach($line in $lines){ if($line -match 'deltaMs=(-?\d+)'){ $deltas += [int]$Matches[1] } }
-          if($deltas.Count -lt 10){ throw "Not enough samples captured ($($deltas.Count)). Keep the stream playing and run again." }
-          $sorted=$deltas|Sort-Object
-          $median=$sorted[[int][Math]::Floor($sorted.Count/2)]
-          $mean=[Math]::Round(($deltas|Measure-Object -Average).Average,1)
-          $min=($deltas|Measure-Object -Minimum).Minimum
-          $max=($deltas|Measure-Object -Maximum).Maximum
-          $first=$deltas[0]
-          $last=$deltas[-1]
-          $drift=$last-$first
-          Write-Host ""
-          Write-Host "Samples: $($deltas.Count)"
-          Write-Host "Median internal offset: $median ms"
-          Write-Host "Mean internal offset: $mean ms"
-          Write-Host "Range: $min to $max ms"
-          Write-Host "Change across capture: $drift ms"
-          if([Math]::Abs($drift) -le 20){Write-Host "Result: offset broadly stable"} else {Write-Host "Result: measurable drift detected"}
-          Write-Host "Raw log: $out"
-          PS
-          cat > dist/RUN_SYNC_TEST.cmd <<'CMD'
-          @echo off
-          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0CAPTURE_SYNC.ps1"
-          pause
-          CMD
-          cat > dist/README.txt <<'EOF'
-          Install Stremio-AV-Sync-Test-arm.apk beside the existing apps.
-          Play the same DTS-HD MA 5.1 source that was smooth but marginally out of sync.
-          Run RUN_SYNC_TEST.cmd on the PC while playback continues.
-          The probe samples video presentation timestamp versus Exo playback position and reports median offset, range and drift.
-          This measures internal player timing. It cannot measure extra physical delay added after Android by a TV panel, HDMI device or speaker.
-          EOF
+
       - uses: actions/upload-artifact@v7
         with:
           name: stremio-avsync-diagnostic-arm
