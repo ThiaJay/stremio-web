@@ -1,0 +1,285 @@
+{
+  "results": [
+    {
+      "engine": "chromium",
+      "name": "ask-and-space",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "dismiss-and-expire",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "pause-always-persistence",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "never",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "recap-remote-enter",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "next-video-priority",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "outage",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "invalid",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "late-source-switch",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "touch-popup",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Mobile viewport emulation, not Android native"
+    },
+    {
+      "engine": "chromium",
+      "name": "shared-consumption-rewind",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "prompt-survives-hidden-controls",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "settings-controls-and-persistence",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "same-episode-new-source",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "credits-seek-not-navigation",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "chromium",
+      "name": "next-episode-plays-not-chooser",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "ask-and-space",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "dismiss-and-expire",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "pause-always-persistence",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "never",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "recap-remote-enter",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "next-video-priority",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "outage",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "invalid",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "late-source-switch",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "shared-consumption-rewind",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "prompt-survives-hidden-controls",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "settings-controls-and-persistence",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "same-episode-new-source",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "credits-seek-not-navigation",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 1,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    },
+    {
+      "engine": "firefox",
+      "name": "next-episode-plays-not-chooser",
+      "status": "PASS",
+      "failure": null,
+      "pageErrors": [],
+      "providerRequests": 2,
+      "scope": "Real compiled browser client with controlled network fixtures"
+    }
+  ],
+  "releaseReady": false,
+  "scope": "Controlled network evidence and lawful local media. No Android native, TV device or real provider acceptance is claimed."
+}
