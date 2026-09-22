@@ -47,6 +47,26 @@ type AudioPreference = {
     language?: string,
 };
 
+type AvSyncCorrection = 'soft' | 'hard';
+
+type AvSyncStatus = 'stable' | 'monitoring' | 'correcting' | 'uncorrectable';
+
+type AvSyncObservation = {
+    offsetMs: number,
+    buffering?: boolean,
+    seeking?: boolean,
+    refreshRateSwitching?: boolean,
+    canSoftCorrect?: boolean,
+    canHardCorrect?: boolean,
+};
+
+type AvSyncState = {
+    offsetMs: number,
+    status: AvSyncStatus,
+    correction?: AvSyncCorrection,
+    generation: number,
+};
+
 type VideoScale = 'contain' | 'cover' | 'fill';
 
 type SubtitleSource = 'embedded' | 'external';
@@ -83,6 +103,7 @@ type Player = {
     audioPreference: AudioPreference | null,
     subtitlePreference: SubtitlePreference | null,
     videoScale: VideoScale | null,
+    avSync: AvSyncState,
     subtitles: Subtitle[],
     title: string | null,
 };
