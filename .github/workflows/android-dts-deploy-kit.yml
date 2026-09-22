@@ -33,13 +33,22 @@ jobs:
       - name: Prove missing APK fails before any device mutation
         shell: powershell
         run: |
-          $previousPreference = $ErrorActionPreference
-          $ErrorActionPreference = 'Continue'
-          $output = & powershell.exe -NoLogo -NoProfile -File .\android-dts\deploy\Deploy-StremioDtsFix.ps1 -Apk .\definitely-missing.apk 2>&1
-          $exitCode = $LASTEXITCODE
-          $ErrorActionPreference = $previousPreference
-          if ($exitCode -eq 0) { throw 'Missing APK unexpectedly succeeded' }
-          if (($output -join [Environment]::NewLine) -notmatch 'official app is left unchanged') {
+          $stdout = Join-Path $env:RUNNER_TEMP 'dts-deploy-stdout.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'dts-deploy-stderr.txt'
+          $process = Start-Process powershell.exe -Wait -PassThru -NoNewWindow `
+            -ArgumentList @(
+              '-NoLogo',
+              '-NoProfile',
+              '-File',
+              (Resolve-Path '.\android-dts\deploy\Deploy-StremioDtsFix.ps1'),
+              '-Apk',
+              '.\definitely-missing.apk'
+            ) `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr
+          $output = ((Get-Content $stdout -Raw -ErrorAction SilentlyContinue) + [Environment]::NewLine + (Get-Content $stderr -Raw -ErrorAction SilentlyContinue))
+          if ($process.ExitCode -eq 0) { throw 'Missing APK unexpectedly succeeded' }
+          if ($output -notmatch 'official app is left unchanged') {
             throw 'Expected fail closed message was not emitted'
           }
       - name: Guard destructive adb commands
