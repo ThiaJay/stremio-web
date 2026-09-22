@@ -8,10 +8,11 @@ type Props = {
     className?: string,
     icon?: string,
     label: string,
+    labelDefault?: string,
     children: React.ReactNode,
 };
 
-const Option = ({ className, icon, label, children }: Props) => {
+const Option = ({ className, icon, label, labelDefault, children }: Props) => {
     return (
         <div className={classNames(className, styles['option'])}>
             <div className={styles['heading']}>
@@ -23,7 +24,7 @@ const Option = ({ className, icon, label, children }: Props) => {
                         />
                 }
                 <div className={styles['label']}>
-                    {t(label)}
+                    {t(label, { defaultValue: labelDefault ?? label })}
                 </div>
             </div>
             <div className={styles['content']}>
