@@ -6,9 +6,17 @@ const sameSegment = (dismissal, segment) => dismissal !== null &&
     dismissal.from === segment.from &&
     dismissal.to === segment.to;
 
-const shouldAutoSkipSegment = ({ segment, target, dismissal }) => {
+const shouldAutoSkipSegment = ({
+    segment,
+    target,
+    dismissal,
+    paused,
+    nextVideoPopupOpen,
+}) => {
     return segment !== null &&
         target !== null &&
+        paused === false &&
+        !nextVideoPopupOpen &&
         (segment.mode ?? 'ask') === 'always' &&
         !segment.dismissed &&
         !sameSegment(dismissal, segment);
