@@ -1,0 +1,76 @@
+name: Prepare native video dependency patch
+on:
+  push:
+    branches: [fix/native-video-backend-patch]
+    paths:
+      - scripts/prepare-video-backend-patch.cjs
+      - tests/videoBackendLifecycle.native.cjs
+      - .github/workflows/native-video-patch.yml
+permissions:
+  contents: read
+concurrency:
+  group: native-video-patch-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.repository == 'ThiaJay/stremio-web' && github.ref == 'refs/heads/fix/native-video-backend-patch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare version locked dependency patch
+        run: |
+          pnpm patch @stremio/stremio-video@0.0.98 --edit-dir .video-patch
+          node scripts/prepare-video-backend-patch.cjs .video-patch
+          pnpm patch-commit .video-patch
+          pnpm install --frozen-lockfile
+      - name: Test actual installed native backend
+        run: node --test tests/videoBackendLifecycle.native.cjs
+      - run: pnpm build
+      - run: pnpm test --runInBand
+      - run: pnpm lint
+      - uses: actions/checkout@v7
+        with:
+          repository: ThiaJay/stremio-development-foundation
+          ref: 51ddfc4f910d30247c2789f6a3fc62e17dd79dbf
+          path: .foundation-gate
+          persist-credentials: false
+      - name: Validate exact generated public changes
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const cp = require('node:child_process');
+          const files = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'];
+          if (fs.existsSync('patches')) files.push(...fs.readdirSync('patches').filter(x => x.endsWith('.patch')).map(x => 'patches/' + x));
+          fs.writeFileSync('.native-patch-publication.txt', files.filter(x => fs.existsSync(x)).map(x => x + '\n' + fs.readFileSync(x, 'utf8')).join('\n'));
+          cp.execFileSync('node', ['.foundation-gate/scripts/publication-gate.mjs', '.native-patch-publication.txt'], {stdio: 'inherit'});
+          NODE
+      - name: Commit only verified dependency files to the isolated branch
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/fix/native-video-backend-patch | cut -f1)" = "$EXPECTED_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pnpm-lock.yaml
+          for f in package.json pnpm-workspace.yaml; do if test -f "$f"; then git add "$f"; fi; done
+          git add patches
+          git diff --cached --check
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Materialise validated native video dependency patch'
+          git push origin HEAD:refs/heads/fix/native-video-backend-patch
