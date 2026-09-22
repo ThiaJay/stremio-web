@@ -25,7 +25,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
         seekShortTimeDurationSelect,
         playInExternalPlayerSelect,
         nextVideoPopupDurationSelect,
-        skipIntroModeSelect,
+        skipSegmentModeSelect,
         bingeWatchingToggle,
         playInBackgroundToggle,
         hardwareDecodingToggle,
