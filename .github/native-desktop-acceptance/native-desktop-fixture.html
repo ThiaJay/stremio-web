@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stremio native desktop acceptance</title>
+  <style>
+    html, body { width: 100%; height: 100%; margin: 0; background: transparent; color: #fff; font: 24px sans-serif; }
+    main { margin: 24px; padding: 20px; background: rgba(0,0,0,.58); border-radius: 16px; max-width: 760px; }
+    pre { font-size: 16px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Native desktop playback acceptance</h1>
+  <pre id="status">waiting for shell IPC</pre>
+</main>
+<script>
+(() => {
+  const status = document.getElementById('status');
+  const state = { shellVersion: null, path: null, timePos: 0, paused: null, receiptSent: false };
+  const failTimer = setTimeout(() => {
+    if (!state.receiptSent) {
+      status.textContent = `FAIL timeout\n${JSON.stringify(state, null, 2)}`;
+      fetch(`/__receipt?status=fail&reason=timeout&timePos=${encodeURIComponent(state.timePos)}`).catch(() => {});
+    }
+  }, 30000);
+
+  function send(message) {
+    globalThis.chrome.webview.postMessage(JSON.stringify(message));
+  }
+
+  function event(name, data) {
+    send({ type: 6, args: ['onEvent', [name, data]] });
+  }
+
+  function maybePass() {
+    if (state.receiptSent) return;
+    if (!state.shellVersion || !state.path || !(state.timePos >= 1.25)) return;
+    state.receiptSent = true;
+    clearTimeout(failTimer);
+    status.textContent = `PASS\n${JSON.stringify(state, null, 2)}`;
+    const query = new URLSearchParams({
+      status: 'pass',
+      shellVersion: String(state.shellVersion),
+      path: String(state.path),
+      timePos: String(state.timePos),
+      paused: String(state.paused),
+    });
+    fetch(`/__receipt?${query}`).catch(() => {});
+  }
+
+  if (!globalThis.chrome?.webview) {
+    status.textContent = 'FAIL primary shell IPC missing';
+    fetch('/__receipt?status=fail&reason=primary-ipc-missing').catch(() => {});
+    return;
+  }
+
+  globalThis.chrome.webview.addEventListener('message', message => {
+    let payload;
+    try { payload = JSON.parse(message.data); } catch { return; }
+    if (!payload) return;
+
+    if (payload.type === 3 && payload.data?.transport) {
+      const properties = payload.data.transport.properties || [];
+      const flat = properties.flat(Infinity);
+      const versionIndex = flat.indexOf('shellVersion');
+      if (versionIndex >= 0) state.shellVersion = flat[versionIndex + 2] || flat[versionIndex + 1] || 'present';
+      event('mpv-observe-prop', 'time-pos');
+      event('mpv-observe-prop', 'path');
+      event('mpv-observe-prop', 'pause');
+      event('mpv-command', ['loadfile', `${location.origin}/native-desktop-fixture.mp4`, 'replace']);
+      status.textContent = `shell ${state.shellVersion} initialised`;
+      return;
+    }
+
+    if (payload.type === 1 && Array.isArray(payload.args)) {
+      const [name, data] = payload.args;
+      if (name === 'mpv-prop-change' && data) {
+        if (data.name === 'time-pos' && typeof data.data === 'number') state.timePos = data.data;
+        if (data.name === 'path' && typeof data.data === 'string') state.path = data.data;
+        if (data.name === 'pause' && typeof data.data === 'boolean') state.paused = data.data;
+        status.textContent = JSON.stringify(state, null, 2);
+        maybePass();
+      }
+      if (name === 'mpv-event-ended' && !state.receiptSent) {
+        status.textContent = `FAIL playback ended early\n${JSON.stringify(data, null, 2)}`;
+        fetch(`/__receipt?status=fail&reason=ended-early&timePos=${encodeURIComponent(state.timePos)}`).catch(() => {});
+      }
+    }
+  });
+
+  send({ type: 3 });
+})();
+</script>
+</body>
+</html>
