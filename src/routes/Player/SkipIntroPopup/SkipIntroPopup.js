@@ -10,78 +10,56 @@ const styles = require('./styles');
 
 const SkipIntroPopup = ({ className, kind, onDismiss, onSkipRequested }) => {
     const { t } = useTranslation();
+    const rootRef = React.useRef(null);
     const skipButtonRef = React.useRef(null);
-    const [animationEnded, setAnimationEnded] = React.useState(false);
-
-    const label = React.useMemo(() => {
-        switch (kind) {
-            case 'recap':
-                return t('PLAYER_SKIP_RECAP', { defaultValue: 'Skip Recap' });
-            case 'outro':
-                return t('PLAYER_SKIP_CREDITS', { defaultValue: 'Skip Credits' });
-            case 'intro':
-            default:
-                return t('PLAYER_SKIP_INTRO', { defaultValue: 'Skip Intro' });
-        }
-    }, [kind, t]);
+    const label = kind === 'recap' ? t('PLAYER_SKIP_RECAP', { defaultValue: 'Skip Recap' }) :
+        kind === 'outro' ? t('PLAYER_SKIP_CREDITS', { defaultValue: 'Skip Credits' }) :
+            t('PLAYER_SKIP_INTRO', { defaultValue: 'Skip Intro' });
 
     React.useLayoutEffect(() => {
-        if (animationEnded && skipButtonRef.current !== null) {
-            skipButtonRef.current.focus();
+        const root = rootRef.current;
+        const previous = document.activeElement;
+        if (previous === document.body || previous === document.documentElement) {
+            skipButtonRef.current?.focus({ preventScroll: true });
         }
-    }, [animationEnded]);
+        return () => {
+            if (root?.contains(document.activeElement) && previous instanceof HTMLElement && previous.isConnected) {
+                previous.focus({ preventScroll: true });
+            }
+        };
+    }, []);
 
-    const onDismissButtonClick = React.useCallback(() => {
-        if (typeof onDismiss === 'function') {
-            onDismiss();
+    const onKeyDown = React.useCallback((event) => {
+        if (['Enter', ' ', 'Escape', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.nativeEvent.buttonClickPrevented = true;
+            if (event.repeat) return;
+            if (event.key === 'Escape') {
+                onDismiss?.();
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                const buttons = Array.from(rootRef.current?.querySelectorAll('[role="button"]') || []);
+                const index = buttons.indexOf(document.activeElement);
+                buttons[(index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+            } else {
+                event.currentTarget.click();
+            }
         }
     }, [onDismiss]);
 
-    const onSkipButtonClick = React.useCallback(() => {
-        if (typeof onSkipRequested === 'function') {
-            onSkipRequested();
-        }
-    }, [onSkipRequested]);
-
-    const onActionKeyDown = React.useCallback((event) => {
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            event.stopPropagation();
-            onDismissButtonClick();
-        } else if (event.key === ' ') {
-            event.preventDefault();
-            event.stopPropagation();
-            event.currentTarget.click();
-        }
-    }, [onDismissButtonClick]);
-
     return (
-        <div
-            className={classnames(className, styles['skip-intro-popup-container'])}
-            role={'group'}
-            aria-label={label}
-            onAnimationEnd={() => setAnimationEnded(true)}
-        >
+        <div ref={rootRef} role={'group'} aria-label={label}
+            className={classnames(className, styles['skip-intro-popup-container'])}>
             <div className={styles['title']}>{label}</div>
             <div className={styles['buttons-container']}>
-                <Button
-                    className={classnames(styles['button-container'], styles['dismiss'])}
-                    role={'button'}
-                    aria-label={t('PLAYER_NEXT_VIDEO_BUTTON_DISMISS')}
-                    onKeyDown={onActionKeyDown}
-                    onClick={onDismissButtonClick}
-                >
+                <Button role={'button'} className={classnames(styles['button-container'], styles['dismiss'])}
+                    onKeyDown={onKeyDown} onClick={onDismiss}>
                     <Icon className={styles['icon']} name={'close'} />
                     <div className={styles['label']}>{t('PLAYER_NEXT_VIDEO_BUTTON_DISMISS')}</div>
                 </Button>
-                <Button
-                    ref={skipButtonRef}
+                <Button ref={skipButtonRef} role={'button'}
                     className={classnames(styles['button-container'], styles['skip-button'])}
-                    role={'button'}
-                    aria-label={label}
-                    onKeyDown={onActionKeyDown}
-                    onClick={onSkipButtonClick}
-                >
+                    onKeyDown={onKeyDown} onClick={onSkipRequested}>
                     <Icon className={styles['icon']} name={'next'} />
                     <div className={styles['label']}>{label}</div>
                 </Button>

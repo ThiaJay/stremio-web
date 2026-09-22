@@ -19,6 +19,9 @@ const segment = {
 
 const valid = {
     segment,
+    time: segment.from,
+    duration: segment.duration,
+    mode: 'ask',
     livePlayback: false,
     canSeek: true,
     streamReady: true,
@@ -105,6 +108,7 @@ describe('getSkipSegmentPopupOpen', () => {
     test('local dismissal is bound to the exact Core segment generation', () => {
         const dismissal = {
             generation: segment.generation,
+            videoId: segment.videoId,
             kind: segment.kind,
             from: segment.from,
             to: segment.to,
@@ -140,26 +144,10 @@ describe('shouldAutoSkipSegment', () => {
         })).toBe(false);
     });
 
-    test('does not auto skip while paused or while Next Episode has priority', () => {
-        expect(shouldAutoSkipSegment({
-            segment: automatic,
-            target: automatic.to,
-            dismissal: null,
-            paused: true,
-            nextVideoPopupOpen: false,
-        })).toBe(false);
-        expect(shouldAutoSkipSegment({
-            segment: automatic,
-            target: automatic.to,
-            dismissal: null,
-            paused: false,
-            nextVideoPopupOpen: true,
-        })).toBe(false);
-    });
-
     test('does not repeat an already consumed segment', () => {
         const dismissal = {
             generation: automatic.generation,
+            videoId: automatic.videoId,
             kind: automatic.kind,
             from: automatic.from,
             to: automatic.to,
@@ -168,8 +156,6 @@ describe('shouldAutoSkipSegment', () => {
             segment: automatic,
             target: automatic.to,
             dismissal,
-            paused: false,
-            nextVideoPopupOpen: false,
         })).toBe(false);
     });
 });

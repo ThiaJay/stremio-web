@@ -1,0 +1,81 @@
+name: Final hardened skip runtime acceptance
+
+on:
+  push:
+    branches:
+      - fix/skip-segment-runtime-safety
+    paths:
+      - .github/final-acceptance/**
+      - .github/workflows/final-hardened-skip-runtime.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-hardened-skip-runtime
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout hardened Web branch
+        uses: actions/checkout@v7
+        with:
+          path: web
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+          run_install: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install pinned Web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Build hardened Web client
+        working-directory: web
+        run: pnpm build
+
+      - name: Install runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y ffmpeg
+          npm install --prefix web/.github/final-acceptance --no-audit --no-fund playwright@1.58.2
+          cd web/.github/final-acceptance
+          npx playwright install --with-deps chromium firefox
+
+      - name: Create lawful local media
+        run: |
+          ffmpeg -hide_banner -loglevel error             -f lavfi -i color=c=black:s=320x180:r=15             -f lavfi -i sine=frequency=440:sample_rate=44100             -t 120 -c:v libvpx -deadline realtime -c:a libvorbis             web/build/fixture.webm
+
+      - name: Run hardened browser runtime matrix
+        working-directory: web
+        run: |
+          mkdir -p acceptance-receipts
+          set -o pipefail
+          node .github/final-acceptance/runtime.cjs build acceptance-receipts/runtime 2>&1 | tee acceptance-receipts/runtime.log
+
+      - name: Preserve acceptance receipt
+        if: always()
+        working-directory: web
+        run: |
+          printf 'web_commit %s\nrun %s\n' "$(git rev-parse HEAD)" "$GITHUB_RUN_ID" > acceptance-receipts/SOURCE.txt
+          sha256sum .github/final-acceptance/runtime.cjs > acceptance-receipts/HARNESS_SHA256.txt
+          node -p "require('./package.json').dependencies['@stremio/stremio-core-web']" > acceptance-receipts/CORE_PACKAGE.txt
+
+      - name: Upload acceptance receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-hardened-skip-runtime-receipt
+          path: web/acceptance-receipts/
+          retention-days: 7
+          if-no-files-found: error

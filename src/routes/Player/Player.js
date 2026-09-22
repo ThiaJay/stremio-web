@@ -46,6 +46,8 @@ const getEndPlaybackTransition = require('./getEndPlaybackTransition');
 const getSkipSegmentTarget = require('./getSkipSegmentTarget');
 const getSkipSegmentPopupOpen = require('./getSkipSegmentPopupOpen');
 const shouldAutoSkipSegment = require('./shouldAutoSkipSegment');
+const createSkipSegmentAttempt = require('./createSkipSegmentAttempt');
+const commitSkipSegment = require('./commitSkipSegment');
 
 const GAMEPAD_HANDLER_ID = 'player';
 
@@ -138,15 +140,21 @@ const Player = () => {
         player.selected?.streamRequest?.path?.id !== undefined &&
         player.libraryItem.state.video_id === player.selected.streamRequest.path.id &&
         (skipSegment === null || skipSegment.videoId === player.selected.streamRequest.path.id);
-    const skipSegmentTarget = getSkipSegmentTarget({
+    const skipSegmentAttempt = React.useMemo(createSkipSegmentAttempt, []);
+    const skipSegmentPlayback = React.useMemo(() => ({
         segment: skipSegment,
+        time: video.state.time,
+        duration: video.state.duration,
+        mode: settings.skipIntroMode ?? 'ask',
         livePlayback,
         canSeek,
         streamReady: player.stream?.type === 'Ready' &&
             video.state.stream !== null &&
             video.state.loaded === true,
         currentVideoMatches,
-    });
+    }), [skipSegment, video.state.time, video.state.duration, settings.skipIntroMode,
+        livePlayback, canSeek, player.stream?.type, video.state.stream, video.state.loaded, currentVideoMatches]);
+    const skipSegmentTarget = skipSegmentAttempt.has(skipSegment) ? null : getSkipSegmentTarget(skipSegmentPlayback);
     const skipSegmentPopupOpen = getSkipSegmentPopupOpen({
         segment: skipSegment,
         target: skipSegmentTarget,
@@ -154,18 +162,18 @@ const Player = () => {
         dismissal: skipSegmentPopupDismissal,
     });
     const autoSkipSegment = shouldAutoSkipSegment({
+        paused: video.state.paused,
+        nextVideoPopupOpen,
         segment: skipSegment,
         target: skipSegmentTarget,
         dismissal: skipSegmentPopupDismissal,
-        paused: video.state.paused,
-        nextVideoPopupOpen,
     });
 
     const [sideDrawerOpen, , closeSideDrawer, toggleSideDrawer] = useBinaryState(false);
 
     const menusOpen = React.useMemo(() => {
-        return optionsMenuOpen || subtitlesMenuOpen || audioMenuOpen || speedMenuOpen || statisticsMenuOpen || castDevicesMenuOpen || sideDrawerOpen || nextVideoPopupOpen || skipSegmentPopupOpen;
-    }, [optionsMenuOpen, subtitlesMenuOpen, audioMenuOpen, speedMenuOpen, statisticsMenuOpen, castDevicesMenuOpen, sideDrawerOpen, nextVideoPopupOpen, skipSegmentPopupOpen]);
+        return optionsMenuOpen || subtitlesMenuOpen || audioMenuOpen || speedMenuOpen || statisticsMenuOpen || castDevicesMenuOpen || sideDrawerOpen || nextVideoPopupOpen;
+    }, [optionsMenuOpen, subtitlesMenuOpen, audioMenuOpen, speedMenuOpen, statisticsMenuOpen, castDevicesMenuOpen, sideDrawerOpen, nextVideoPopupOpen]);
 
     const closeMenus = React.useCallback(() => {
         closeOptionsMenu();
@@ -349,42 +357,44 @@ const Player = () => {
         seek(target, video.state.duration, video.state.manifest?.name);
     }, [canSeek, seekStart, seekEnd, video.state.duration, video.state.manifest]);
     const onDismissSkipSegmentPopup = React.useCallback(() => {
-        if (skipSegment === null) {
-            return;
-        }
-
+        if (skipSegment === null) return false;
+        skipSegmentAttempt.claim(skipSegment);
         setSkipSegmentPopupDismissal({
-            generation: skipSegment.generation,
-            kind: skipSegment.kind,
-            from: skipSegment.from,
-            to: skipSegment.to,
+            generation: skipSegment.generation, videoId: skipSegment.videoId,
+            kind: skipSegment.kind, from: skipSegment.from, to: skipSegment.to,
         });
-        core.transport.dispatch({
-            action: 'Player',
-            args: {
-                action: 'DismissSkipSegment',
+        try {
+            Promise.resolve(core.transport.dispatch({
+                action: 'Player',
                 args: {
-                    generation: skipSegment.generation,
-                    kind: skipSegment.kind,
-                    from: skipSegment.from,
-                    to: skipSegment.to,
+                    action: 'DismissSkipSegment',
+                    args: { generation: skipSegment.generation, kind: skipSegment.kind,
+                        from: skipSegment.from, to: skipSegment.to },
                 },
-            },
-        });
-    }, [skipSegment, core.transport]);
+            }, 'player')).catch((error) => onError({ critical: false, message: error.message }));
+            return true;
+        } catch (error) {
+            onError({ critical: false, message: error.message });
+            return false;
+        }
+    }, [skipSegment, skipSegmentAttempt, core.transport, onError]);
 
     const onSkipSegmentRequested = React.useCallback(() => {
-        if (skipSegmentTarget !== null && !nextVideoPopupOpen) {
-            onDismissSkipSegmentPopup();
-            commitSeek(skipSegmentTarget);
-        }
-    }, [skipSegmentTarget, nextVideoPopupOpen, onDismissSkipSegmentPopup, commitSeek]);
+        const target = getSkipSegmentTarget(skipSegmentPlayback);
+        if (target === null || nextVideoPopupOpen) return;
+        commitSkipSegment({
+            segment: skipSegment, target, attempt: skipSegmentAttempt,
+            dismiss: onDismissSkipSegmentPopup, seek: commitSeek,
+            onError: (error) => onError({ critical: false, message: error.message }),
+        });
+    }, [skipSegmentPlayback, skipSegment, nextVideoPopupOpen, skipSegmentAttempt,
+        onDismissSkipSegmentPopup, commitSeek, onError]);
 
     React.useEffect(() => {
-        if (autoSkipSegment) {
+        if (autoSkipSegment && !menusOpen && error === null && !seeking) {
             onSkipSegmentRequested();
         }
-    }, [autoSkipSegment, onSkipSegmentRequested]);
+    }, [autoSkipSegment, menusOpen, error, seeking, onSkipSegmentRequested]);
     const {
         time: keyboardSeekTime,
         seekBy: seekByKeyboard,
@@ -1169,9 +1179,9 @@ const Player = () => {
                 disabled={subtitlesMenuOpen || speedMenuOpen}
             />
             {
-                skipSegmentPopupOpen && skipSegment !== null ?
+                skipSegmentPopupOpen && skipSegment !== null && !menusOpen && error === null ?
                     <SkipIntroPopup
-                        className={classnames(styles['layer'], styles['menu-layer'])}
+                        className={classnames(styles['layer'], styles['skip-segment-layer'])}
                         kind={skipSegment.kind}
                         onDismiss={onDismissSkipSegmentPopup}
                         onSkipRequested={onSkipSegmentRequested}
