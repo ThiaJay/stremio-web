@@ -1,0 +1,88 @@
+name: Android DTS recovery public validation
+
+on:
+  push:
+    branches: [android/dts-audio-recovery]
+    paths:
+      - android-dts/**
+      - .github/workflows/android-dts-public.yml
+  workflow_dispatch:
+
+concurrency:
+  group: android-dts-public-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: anilbeesetti/nextlib
+          ref: 6ff6cf9d0820382b3c233d018c52e4163b09d345
+          path: nextlib
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: anilbeesetti/nextlib
+          ref: 2dc77cd2d9352bc308aa26782f9c77a320df510b
+          path: nextlib-new
+          persist-credentials: false
+      - name: Apply bounded NextLib backport
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder
+          for file in DecoderMode.kt DecoderRendererController.kt DecoderManager.kt NextRenderersFactory.kt; do
+            cp "nextlib-new/$base/$file" "nextlib/$base/$file"
+          done
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('nextlib/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java')
+          s=p.read_text()
+          old='case MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_DTS_HD -> "dca";'
+          new='case MimeTypes.AUDIO_DTS, MimeTypes.AUDIO_DTS_HD, MimeTypes.AUDIO_DTS_EXPRESS, MimeTypes.AUDIO_DTS_X -> "dca";'
+          if s.count(old) != 1:
+              raise SystemExit('Unexpected DTS mapping baseline')
+          p.write_text(s.replace(old,new))
+          b=Path('nextlib/media3ext/build.gradle.kts')
+          bs=b.read_text()
+          anchor='    compileOnly(libs.kotlin.annotations.jvm)\n}'
+          replacement='    compileOnly(libs.kotlin.annotations.jvm)\n    testImplementation("junit:junit:4.13.2")\n}'
+          if bs.count(anchor) != 1:
+              raise SystemExit('Unexpected test dependency baseline')
+          b.write_text(bs.replace(anchor,replacement))
+          PY
+      - name: Compile Stremio recovery candidate in the real Media3 1.10 module
+        shell: bash
+        run: |
+          set -euo pipefail
+          dst=nextlib/media3ext/src/test/java/com/stremio/common/players
+          mkdir -p "$dst"
+          cp android-dts/src/DtsAudioRecoveryPolicy.kt "$dst/"
+          cp android-dts/src/DtsAudioRecoveryController.kt "$dst/"
+          cp android-dts/test/DtsAudioRecoveryPolicyTest.kt "$dst/"
+          git -C nextlib diff --check
+          cd nextlib
+          ./gradlew :media3ext:testDebugUnitTest :media3ext:assembleRelease --stacktrace
+      - name: Create resumable build checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checkpoint
+          cp nextlib/media3ext/build/outputs/aar/media3ext-release.aar checkpoint/nextlib-media3ext-dts-recovery.aar
+          cp android-dts/RECOVERY_MANIFEST.json checkpoint/
+          cp -r android-dts/deploy checkpoint/deploy
+          sha256sum checkpoint/nextlib-media3ext-dts-recovery.aar > checkpoint/SHA256SUMS.txt
+          find checkpoint/deploy -type f -print0 | sort -z | xargs -0 sha256sum >> checkpoint/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-dts-recovery-checkpoint
+          path: checkpoint
+          if-no-files-found: error
+          retention-days: 30
