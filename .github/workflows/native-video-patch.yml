@@ -4,6 +4,7 @@ on:
     branches: [fix/native-video-backend-patch]
     paths:
       - scripts/prepare-video-backend-patch.cjs
+      - scripts/restore-core-integrity.cjs
       - tests/videoBackendLifecycle.native.cjs
       - .github/workflows/native-video-patch.yml
 permissions:
@@ -29,6 +30,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Restore the reviewed Core package integrity
+        run: node scripts/restore-core-integrity.cjs
       - run: pnpm install --frozen-lockfile
       - name: Prepare version locked dependency patch
         run: |
