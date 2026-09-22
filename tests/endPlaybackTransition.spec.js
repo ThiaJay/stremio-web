@@ -3,26 +3,38 @@
 const getEndPlaybackTransition = require('../src/routes/Player/getEndPlaybackTransition');
 
 describe('getEndPlaybackTransition', () => {
-    test('advances only when next video exists and auto play is enabled', () => {
+    test('advances only when auto play is enabled and Core has a directly playable next video', () => {
         expect(getEndPlaybackTransition({
             isEpg: false,
             hasNextVideo: true,
+            hasPlayableNextVideo: true,
             bingeWatching: true,
         })).toBe('advance');
     });
 
-    test('does not advance when auto play is disabled', () => {
+    test('stays in the ended player when auto play is disabled', () => {
         expect(getEndPlaybackTransition({
             isEpg: false,
             hasNextVideo: true,
+            hasPlayableNextVideo: true,
             bingeWatching: false,
-        })).toBe('back');
+        })).toBe('stay');
     });
 
-    test('goes back when there is no next video', () => {
+    test('fails closed when a next episode exists without an exact playable continuation', () => {
+        expect(getEndPlaybackTransition({
+            isEpg: false,
+            hasNextVideo: true,
+            hasPlayableNextVideo: false,
+            bingeWatching: true,
+        })).toBe('stay');
+    });
+
+    test('goes back when there is no next episode', () => {
         expect(getEndPlaybackTransition({
             isEpg: false,
             hasNextVideo: false,
+            hasPlayableNextVideo: false,
             bingeWatching: true,
         })).toBe('back');
     });
@@ -31,6 +43,7 @@ describe('getEndPlaybackTransition', () => {
         expect(getEndPlaybackTransition({
             isEpg: true,
             hasNextVideo: true,
+            hasPlayableNextVideo: true,
             bingeWatching: true,
         })).toBe('none');
     });
