@@ -1,0 +1,29 @@
+name: Inspect Exo companion methods
+
+on:
+  push:
+    branches:
+      - android/tv-side-by-side-dts
+    paths:
+      - .github/workflows/inspect-exo-companion-methods.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Decode and list companion methods
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/stremio.apk https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          java -jar /tmp/apktool.jar d -f --no-res -o /tmp/decoded /tmp/stremio.apk >/dev/null
+          target="$(find /tmp/decoded -type f -path '*/com/stremio/common/players/ExoPlayer$Companion.smali' -print -quit)"
+          test -n "$target"
+          grep -n '^\.method' "$target"
