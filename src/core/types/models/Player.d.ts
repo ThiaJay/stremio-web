@@ -47,6 +47,51 @@ type AudioPreference = {
     language?: string,
 };
 
+type AvSyncCorrection = 'soft' | 'hard';
+
+type AvSyncStatus = 'stable' | 'monitoring' | 'correcting' | 'uncorrectable';
+
+type AvSyncObservation = {
+    offsetMs: number,
+    buffering?: boolean,
+    seeking?: boolean,
+    refreshRateSwitching?: boolean,
+    canSoftCorrect?: boolean,
+    canHardCorrect?: boolean,
+};
+
+type AvSyncState = {
+    offsetMs: number,
+    status: AvSyncStatus,
+    correction?: AvSyncCorrection,
+    generation: number,
+};
+
+type PlaybackRecoveryAction = 'transcodeAudio' | 'switchPlaybackEngine' | 'restoreStableVideoAndTranscodeAudio' | 'switchStream';
+
+type PlaybackHealthStatus = 'healthy' | 'monitoring' | 'recovering' | 'exhausted';
+
+type PlaybackHealthObservation = {
+    engine?: string,
+    audioCodec?: string,
+    audioExpected?: boolean,
+    audioPresent?: boolean,
+    videoStable?: boolean,
+    transient?: boolean,
+    canTranscodeAudio?: boolean,
+    canSwitchEngine?: boolean,
+    canRestoreStableVideo?: boolean,
+    canSwitchStream?: boolean,
+};
+
+type PlaybackHealthState = {
+    status: PlaybackHealthStatus,
+    recovery?: PlaybackRecoveryAction,
+    generation: number,
+    engine?: string,
+    audioCodec?: string,
+};
+
 type VideoScale = 'contain' | 'cover' | 'fill';
 
 type IntroData = {
@@ -109,6 +154,8 @@ type Player = {
     audioPreference: AudioPreference | null,
     subtitlePreference: SubtitlePreference | null,
     videoScale: VideoScale | null,
+    avSync: AvSyncState,
+    playbackHealth: PlaybackHealthState,
     introOutro: IntroOutro | null,
     skipSegment: SkipSegmentState | null,
     skipIntro?: SkipSegmentState | null,
