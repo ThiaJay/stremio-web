@@ -1,0 +1,89 @@
+name: Probe development reconciliation conflicts
+
+on:
+  push:
+    branches: [integration/universal-player-web]
+    paths:
+      - '.github/workflows/reconcile-development-probe.yml'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Probe merge without changing product source
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin development
+          base_head="$(git rev-parse HEAD)"
+          dev_head="$(git rev-parse origin/development)"
+          set +e
+          git merge --no-commit --no-ff origin/development >/tmp/merge.out 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo 'clean=true' >> "$GITHUB_OUTPUT"
+            git merge --abort || true
+            conflicts='none'
+          else
+            conflicts="$(git diff --name-only --diff-filter=U | sort)"
+            git merge --abort || true
+            if [ -z "$conflicts" ]; then
+              cat /tmp/merge.out
+              exit "$rc"
+            fi
+            echo 'clean=false' >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "base_head=$base_head"
+            echo "dev_head=$dev_head"
+            echo 'conflicts<<EOF'
+            printf '%s\n' "$conflicts"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: Record conflict evidence on PR 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLEAN: ${{ steps.probe.outputs.clean }}
+          BASE_HEAD: ${{ steps.probe.outputs.base_head }}
+          DEV_HEAD: ${{ steps.probe.outputs.dev_head }}
+          CONFLICTS: ${{ steps.probe.outputs.conflicts }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo 'Development reconciliation probe'
+            echo
+            echo "Integration head tested: \`$BASE_HEAD\`"
+            echo "Development head tested: \`$DEV_HEAD\`"
+            echo
+            if [ "$CLEAN" = 'true' ]; then
+              echo 'The merge probe is clean.'
+            else
+              echo 'The merge probe found these files requiring deliberate reconciliation:'
+              echo
+              printf '%s\n' "$CONFLICTS" | sed 's/^/- `/' | sed 's/$/`/'
+            fi
+            echo
+            echo 'No product source was changed by this probe.'
+          } >/tmp/comment.md
+          gh pr comment 10 --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
+      - name: Self clean probe workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/reconcile-development-probe.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Remove development reconciliation probe'
+          git push origin HEAD:integration/universal-player-web
