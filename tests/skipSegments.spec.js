@@ -19,6 +19,9 @@ const segment = {
 
 const valid = {
     segment,
+    time: segment.from,
+    duration: segment.duration,
+    mode: 'ask',
     livePlayback: false,
     canSeek: true,
     streamReady: true,
@@ -105,6 +108,7 @@ describe('getSkipSegmentPopupOpen', () => {
     test('local dismissal is bound to the exact Core segment generation', () => {
         const dismissal = {
             generation: segment.generation,
+            videoId: segment.videoId,
             kind: segment.kind,
             from: segment.from,
             to: segment.to,
@@ -125,6 +129,8 @@ describe('shouldAutoSkipSegment', () => {
             segment: { ...automatic, kind },
             target: automatic.to,
             dismissal: null,
+            paused: false,
+            nextVideoPopupOpen: false,
         })).toBe(true);
     });
 
@@ -133,12 +139,15 @@ describe('shouldAutoSkipSegment', () => {
             segment: { ...automatic, mode },
             target: automatic.to,
             dismissal: null,
+            paused: false,
+            nextVideoPopupOpen: false,
         })).toBe(false);
     });
 
     test('does not repeat an already consumed segment', () => {
         const dismissal = {
             generation: automatic.generation,
+            videoId: automatic.videoId,
             kind: automatic.kind,
             from: automatic.from,
             to: automatic.to,

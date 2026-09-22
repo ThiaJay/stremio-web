@@ -22,7 +22,7 @@
         "@babel/runtime": "7.29.2",
         "@sentry/browser": "8.42.0",
         "@stremio/stremio-colors": "5.2.0",
-        "@stremio/stremio-core-web": "https://raw.githubusercontent.com/ThiaJay/stremio-core/9323c339c29006e315e6ae10cfe6effddb796fea/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz",
+        "@stremio/stremio-core-web": "https://raw.githubusercontent.com/ThiaJay/stremio-core/85f9b5de97105e254fe85ef9da9cfecafd66e190/stremio-core-web/development/stremio-stremio-core-web-0.63.1.tgz",
         "@stremio/stremio-icons": "5.15.0",
         "@stremio/stremio-video": "0.0.98",
         "bowser": "2.14.1",

@@ -22,11 +22,11 @@ jobs:
         with:
           path: web
 
-      - name: Checkout exact Core branch
+      - name: Checkout Core development
         uses: actions/checkout@v7
         with:
           repository: ThiaJay/stremio-core
-          ref: feat/skip-segments-core-successor
+          ref: development
           path: core
 
       - name: Rust setup
@@ -44,7 +44,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Build exact Core Web package
+      - name: Build Core Web package
         working-directory: core/stremio-core-web
         run: |
           npm ci
@@ -61,18 +61,18 @@ jobs:
         working-directory: web
         run: pnpm install --frozen-lockfile
 
-      - name: Overlay exact Core package
+      - name: Overlay Core package
         working-directory: web
         run: |
           CORE_TGZ="$(find ../core/stremio-core-web -maxdepth 1 -name '*.tgz' -print -quit)"
           test -n "$CORE_TGZ"
           pnpm add --ignore-workspace-root-check "$CORE_TGZ"
 
-      - name: Build Web with exact Core
+      - name: Build Web with Core development
         working-directory: web
         run: pnpm build
 
-      - name: Test Web with exact Core
+      - name: Test Web with Core development
         working-directory: web
         run: pnpm exec jest --runInBand
 

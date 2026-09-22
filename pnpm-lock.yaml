@@ -21,8 +21,8 @@ importers:
         specifier: 5.2.0
         version: 5.2.0
       '@stremio/stremio-core-web':
-        specifier: https://raw.githubusercontent.com/ThiaJay/stremio-core/9323c339c29006e315e6ae10cfe6effddb796fea/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz
-        version: https://raw.githubusercontent.com/ThiaJay/stremio-core/9323c339c29006e315e6ae10cfe6effddb796fea/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz
+        specifier: https://raw.githubusercontent.com/ThiaJay/stremio-core/85f9b5de97105e254fe85ef9da9cfecafd66e190/stremio-core-web/development/stremio-stremio-core-web-0.63.1.tgz
+        version: https://raw.githubusercontent.com/ThiaJay/stremio-core/85f9b5de97105e254fe85ef9da9cfecafd66e190/stremio-core-web/development/stremio-stremio-core-web-0.63.1.tgz
       '@stremio/stremio-icons':
         specifier: 5.15.0
         version: 5.15.0
@@ -1430,8 +1430,8 @@ packages:
   '@stremio/stremio-colors@5.2.0':
     resolution: {integrity: sha512-dYlPgu9W/H7c9s1zmW5tiDnRenaUa4Hg1QCyOg1lhOcgSfM/bVTi5nnqX+IfvGTTUNA0zgzh8hI3o3miwnZxTg==}
 
-  '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/9323c339c29006e315e6ae10cfe6effddb796fea/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz':
-    resolution: {integrity: sha512-vBZnTd+kRDs2FkQpbmp7IDKn3Idz0iR84Q6549Q7Qg/r2P8wCe6HqyHirPMkUor3+cY4Iilan7omECRQf/xk3g==, tarball: https://raw.githubusercontent.com/ThiaJay/stremio-core/9323c339c29006e315e6ae10cfe6effddb796fea/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz}
+  '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/85f9b5de97105e254fe85ef9da9cfecafd66e190/stremio-core-web/development/stremio-stremio-core-web-0.63.1.tgz':
+    resolution: {integrity: sha512-Ofc4dKxteRjHORQtY8Qbp2gdxAKkR4WLiMjNf49DrCU7cWR6Vb05l8gH74OFd9/BEBjdEQAwPpqxG5wlHptmDg==, tarball: https://raw.githubusercontent.com/ThiaJay/stremio-core/85f9b5de97105e254fe85ef9da9cfecafd66e190/stremio-core-web/development/stremio-stremio-core-web-0.63.1.tgz}
     version: 0.63.1
 
   '@stremio/stremio-icons@5.15.0':
@@ -3380,7 +3380,7 @@ packages:
     engines: {node: '>=6'}
 
   langs@https://codeload.github.com/Stremio/nodejs-langs/tar.gz/e5a3af7d2dd556592cbfe7cf879c1064ed0081a1:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/Stremio/nodejs-langs/tar.gz/e5a3af7d2dd556592cbfe7cf879c1064ed0081a1}
+    resolution: {gitHosted: true, integrity: sha512-fWcYqaDF8BSwZUJq2snbXOsUPyOFz5tTdXcRGVX0nfHg7D/dpB1Xxmou6bRcfmF0pCHQv3dp6kb+MfH39n4IRg==, tarball: https://codeload.github.com/Stremio/nodejs-langs/tar.gz/e5a3af7d2dd556592cbfe7cf879c1064ed0081a1}
     version: 2.0.0
 
   launch-editor@2.13.2:
@@ -4458,7 +4458,7 @@ packages:
     deprecated: The work that was done in this beta branch won't be included in future versions
 
   spatial-navigation-polyfill@https://codeload.github.com/Stremio/spatial-navigation/tar.gz/64871b1422466f5f45d24ebc8bbd315b2ebab6a6:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/Stremio/spatial-navigation/tar.gz/64871b1422466f5f45d24ebc8bbd315b2ebab6a6}
+    resolution: {gitHosted: true, integrity: sha512-AQdN6X+KAF3J7agPKdu5oSmvICFTZBtA3DKNMM+TvX+H3eFL2hMQgUJ3I+vtUpfvy2MSUxv/dgAsu/dy45QG+Q==, tarball: https://codeload.github.com/Stremio/spatial-navigation/tar.gz/64871b1422466f5f45d24ebc8bbd315b2ebab6a6}
     version: 1.2.0
 
   spdy-transport@3.0.0:
@@ -4837,7 +4837,7 @@ packages:
     engines: {node: '>=0.10.0'}
 
   vtt.js@https://codeload.github.com/jaruba/vtt.js/tar.gz/84d33d157848407d790d78423dacc41a096294f0:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/jaruba/vtt.js/tar.gz/84d33d157848407d790d78423dacc41a096294f0}
+    resolution: {gitHosted: true, integrity: sha512-lh+14Ud2Ou18YjKKxj4KFuBLa5e1iiboz6GeknlsIf8Ljt6+tsayf1vQBn+nms3SDxQLnvpBmBqaRDY4BMmDqQ==, tarball: https://codeload.github.com/jaruba/vtt.js/tar.gz/84d33d157848407d790d78423dacc41a096294f0}
     version: 0.13.0
 
   walker@1.0.8:
@@ -6523,7 +6523,7 @@ snapshots:
 
   '@stremio/stremio-colors@5.2.0': {}
 
-  '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/9323c339c29006e315e6ae10cfe6effddb796fea/stremio-core-web/integration/universal-player-core/dev/stremio-stremio-core-web-0.63.1.tgz':
+  '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/85f9b5de97105e254fe85ef9da9cfecafd66e190/stremio-core-web/development/stremio-stremio-core-web-0.63.1.tgz':
     dependencies:
       '@babel/runtime': 7.24.1
 
