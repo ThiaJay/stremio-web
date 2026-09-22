@@ -1,0 +1,45 @@
+name: A V recovery round trip
+on:
+  push:
+    branches: [feat/av-sync-session-safety]
+    paths:
+      - tests/av-sync-contract/**
+      - .github/workflows/av-sync-contract.yml
+      - av-sync-v2-inputs.json
+      - src/routes/Player/avSyncV2Bridge.js
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: ThiaJay/stremio-core
+          ref: dd55e42fdfbe5f20dbab5fb4d7c6af45cfd82eb6
+          path: .contract-core
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .contract-core -> target
+      - name: Compile the real Core policy and action schema
+        run: |
+          test "$(git -C .contract-core rev-parse HEAD)" = "$(python3 -c 'import json; print(json.load(open("av-sync-v2-inputs.json"))["coreSourceCommit"])')"
+          mkdir -p .contract-core/examples
+          cp tests/av-sync-contract/av_sync_contract.rs .contract-core/examples/av_sync_contract.rs
+          cargo build --manifest-path .contract-core/Cargo.toml --locked --example av_sync_contract
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Test native observation through Core and back to native recovery
+        run: node tests/av-sync-contract/roundtrip.cjs
