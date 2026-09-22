@@ -2,7 +2,7 @@ name: Android DTS recovery fast compile
 
 on:
   push:
-    branches: [android/dts-audio-recovery]
+    branches: [android/dts-audio-recovery, feat/android-dts-selective-final]
     paths:
       - android-dts/src/**
       - android-dts/test/**
