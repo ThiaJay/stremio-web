@@ -74,7 +74,7 @@ jobs:
 
       - name: Test Web with exact Core
         working-directory: web
-        run: pnpm test -- --runInBand
+        run: pnpm exec jest --runInBand
 
       - name: Lint Web
         working-directory: web
