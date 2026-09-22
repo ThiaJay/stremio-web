@@ -8,6 +8,8 @@ Changes to the shared video dependency are carried as a version locked pnpm patc
 
 The patch was materialised in commit 96feede8ba7e3116252b5c132cf62194f6a78819 after its generated files matched the exact privately reviewed hashes. Public preparation run 35694277148 passed frozen dependency installation, nine installed backend tests, the production build, all 95 existing Web tests and the existing lint gate. Existing lint and build warnings remain.
 
+The later reconciliation in commit e1c4ff1bbe617338dcaa2eef615c97c97e389240 preserves integration commit 149d17350e76f7f9b504298876a2024894353072 on the candidate branch. Its new Core locator resolves to the same verified package bytes and retains SHA 512 integrity. Run 35695050418 passed frozen installation, backend tests, the expanded Web suite, build and lint. The temporary reconciliation workflow is also retired, with its recipe preserved in commit 1633fd666af167861ec8308114ace7577cd3ccd6. The retained lockfile and acceptance workflow supersede that single use action.
+
 The temporary preparation workflow and scripts have been retired from the current tree. Their reproducible recipe is preserved in commit ca40816d347fb162a2632470ea9d4aeede97939d. The retained dependency patch and readonly native video acceptance workflow are their successors. No feature, test or recovery evidence is discarded.
 
 The acceptance workflow validates the installed dependency on Ubuntu, Windows and macOS. Patch line endings are fixed to LF to preserve the same content hash across checkouts. These jobs do not merge, deploy, change repository permissions or update the integration branch.
