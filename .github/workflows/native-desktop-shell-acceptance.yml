@@ -16,118 +16,178 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  shell-runtime:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 35
+  linux-shell-runtime:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:resolute
+    timeout-minutes: 45
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      PRODUCT_COMMIT: 0ae947555fbb9da757d640e4179073063636a26e
+      LINUX_SHELL_COMMIT: fa63b2c5258759fcc1ac9bae9ce23d2e801ae441
     steps:
-      - name: Checkout exact Web candidate
+      - name: Bootstrap container
+        run: |
+          apt-get update -qq
+          apt-get install --no-install-recommends -y git ca-certificates curl
+
+      - name: Checkout validation harness
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Verify product source binding
+      - name: Verify exact product source binding
         shell: bash
         run: |
           set -euo pipefail
-          PRODUCT_COMMIT='0ae947555fbb9da757d640e4179073063636a26e'
           git cat-file -e "${PRODUCT_COMMIT}^{commit}"
           git diff --quiet "$PRODUCT_COMMIT" HEAD -- \
             ':(exclude).github/native-desktop-acceptance/**' \
             ':(exclude).github/workflows/native-desktop-shell-acceptance.yml'
-          printf 'web_product_commit %s\nvalidation_commit %s\n' "$PRODUCT_COMMIT" "$(git rev-parse HEAD)" > source-binding.txt
+          printf 'web_product_commit %s\nvalidation_commit %s\nlinux_shell_commit %s\n' \
+            "$PRODUCT_COMMIT" "$(git rev-parse HEAD)" "$LINUX_SHELL_COMMIT" > source-binding.txt
 
-      - name: Install pnpm and Node
-        uses: pnpm/action-setup@v6.1.0
-        with:
-          version: 11.8.0
-          run_install: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-
-      - name: Build exact Web product
+      - name: Install build and runtime dependencies
+        shell: bash
         run: |
+          set -euo pipefail
+          apt-get update -qq
+          apt-get install --no-install-recommends -y \
+            build-essential pkg-config libssl-dev libgtk-4-dev libadwaita-1-dev \
+            libwebkitgtk-6.0-dev libmpv-dev gettext nodejs npm python3 ffmpeg \
+            xvfb xauth dbus-x11 imagemagick mesa-utils libgl1-mesa-dri
+          npm install --global pnpm@11.8.0
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build exact Web product in detached worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/web-product "$PRODUCT_COMMIT"
+          cd /tmp/web-product
           pnpm install --frozen-lockfile
           pnpm build
+          test -f "build/${PRODUCT_COMMIT}/scripts/main.js"
 
-      - name: Install native shell build and runtime dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install --no-install-recommends -y \
-            build-essential cmake pkg-config git curl ca-certificates \
-            qtbase5-dev qtdeclarative5-dev qtwebengine5-dev libqt5webchannel5-dev \
-            qml-module-qtwebengine qml-module-qtwebchannel qml-module-qt-labs-platform \
-            qml-module-qtquick-dialogs qml-module-qtquick-controls qml-module-qt-labs-settings \
-            qml-module-qt-labs-folderlistmodel libmpv-dev libssl-dev librsvg2-bin xvfb xauth ffmpeg
-          mkdir -p /tmp/native-desktop-acceptance
-          npm install --prefix /tmp/native-desktop-acceptance --no-package-lock --no-audit --no-fund playwright-core@1.58.2
-
-      - name: Build pinned official Stremio desktop shell
+      - name: Build pinned current Stremio Linux shell
+        shell: bash
         run: |
           set -euo pipefail
-          git clone --filter=blob:none https://github.com/Stremio/stremio-shell.git shell
-          cd shell
-          git checkout --detach c3a8bcbf857d5569b6ae7444ead0dc0a0814888b
-          git submodule update --init --recursive
-          test "$(git rev-parse HEAD)" = "c3a8bcbf857d5569b6ae7444ead0dc0a0814888b"
-          qmake
-          make -f release.makefile -j2
-          test -x build/stremio
-          printf 'shell_commit %s\n' "$(git rev-parse HEAD)" >> ../source-binding.txt
+          git clone --filter=blob:none https://github.com/Stremio/stremio-linux-shell.git /tmp/stremio-linux-shell
+          cd /tmp/stremio-linux-shell
+          git checkout --detach "$LINUX_SHELL_COMMIT"
+          test "$(git rev-parse HEAD)" = "$LINUX_SHELL_COMMIT"
+          "$HOME/.cargo/bin/cargo" build --release
+          test -x target/release/stremio-linux-shell
 
-      - name: Prepare isolated shell runtime
+      - name: Prepare deterministic native playback fixture
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -f shell/server.js ]; then cp shell/server.js shell/build/server.js; fi
-          if [ ! -f shell/build/server.js ] && [ -f shell/server-url.txt ]; then curl --fail --location "$(cat shell/server-url.txt)" -o shell/build/server.js; fi
-          ln -sf "$(command -v node)" shell/build/node
-          test -f shell/build/server.js
-          test -x shell/build/node
+          cp .github/native-desktop-acceptance/native-desktop-fixture.html /tmp/web-product/build/native-desktop-fixture.html
+          ffmpeg -hide_banner -loglevel error -y \
+            -f lavfi -i 'testsrc2=size=640x360:rate=30' \
+            -f lavfi -i 'sine=frequency=1000:sample_rate=48000' \
+            -t 5 -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 128k \
+            /tmp/web-product/build/native-desktop-fixture.mp4
+          ffprobe -v error -show_entries stream=codec_type,codec_name -of json \
+            /tmp/web-product/build/native-desktop-fixture.mp4 > fixture-media-info.json
+          grep -q '"video"' fixture-media-info.json
+          grep -q '"audio"' fixture-media-info.json
 
-      - name: Launch source-bound Web server and native shell
+      - name: Exercise current native shell and real libmpv playback
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p native-desktop-receipt
-          python3 -m http.server 4173 --bind 127.0.0.1 --directory build > native-desktop-receipt/web-server.log 2>&1 &
-          echo $! > native-desktop-receipt/web-server.pid
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/ >/dev/null && break; sleep 1; done
-          curl -fsS http://127.0.0.1:4173/ >/dev/null
-          (
-            cd shell/build
-            export QTWEBENGINE_REMOTE_DEBUGGING=9222
-            export QTWEBENGINE_DISABLE_SANDBOX=1
-            export QTWEBENGINE_CHROMIUM_FLAGS='--no-sandbox --disable-gpu --autoplay-policy=no-user-gesture-required'
-            xvfb-run -a ./stremio '--webui-url=http://127.0.0.1:4173/#/board' --development --streaming-server > ../../native-desktop-receipt/shell.log 2>&1
-          ) &
-          echo $! > native-desktop-receipt/shell.pid
+          export ACCEPTANCE_ROOT=/tmp/web-product/build
+          export ACCEPTANCE_RECEIPT="$PWD/native-desktop-receipt/fixture-receipt.json"
+          python3 .github/native-desktop-acceptance/server.py > native-desktop-receipt/web-server.log 2>&1 &
+          SERVER_PID=$!
+          echo "$SERVER_PID" > native-desktop-receipt/web-server.pid
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:4173/native-desktop-fixture.html >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:4173/native-desktop-fixture.html >/dev/null
 
-      - name: Exercise real Stremio Shell WebEngine integration
-        env:
-          ACCEPTANCE_OUT: native-desktop-receipt
-          CDP_ENDPOINT: http://127.0.0.1:9222
-          NODE_PATH: /tmp/native-desktop-acceptance/node_modules
-        run: node .github/native-desktop-acceptance/smoke.cjs
+          Xvfb :99 -screen 0 1280x720x24 > native-desktop-receipt/xvfb.log 2>&1 &
+          XVFB_PID=$!
+          echo "$XVFB_PID" > native-desktop-receipt/xvfb.pid
+          export DISPLAY=:99
+          eval "$(dbus-launch --sh-syntax)"
+          export GDK_BACKEND=x11
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export RUST_LOG=debug
+
+          /tmp/stremio-linux-shell/target/release/stremio-linux-shell \
+            --url http://127.0.0.1:4173/native-desktop-fixture.html \
+            > native-desktop-receipt/native-fixture-shell.log 2>&1 &
+          FIXTURE_SHELL_PID=$!
+          echo "$FIXTURE_SHELL_PID" > native-desktop-receipt/native-fixture-shell.pid
+
+          for i in $(seq 1 45); do
+            if [ -s native-desktop-receipt/fixture-receipt.json ]; then break; fi
+            if ! kill -0 "$FIXTURE_SHELL_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          import -display :99 -window root native-desktop-receipt/native-mpv-FIXTURE.png || true
+          test -s native-desktop-receipt/fixture-receipt.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          receipt = json.loads(Path('native-desktop-receipt/fixture-receipt.json').read_text())
+          assert receipt.get('status') == 'pass', receipt
+          assert float(receipt.get('timePos', 0)) >= 1.25, receipt
+          assert 'native-desktop-fixture.mp4' in receipt.get('path', ''), receipt
+          assert receipt.get('shellVersion'), receipt
+          print(json.dumps(receipt, indent=2, sort_keys=True))
+          PY
+
+          kill "$FIXTURE_SHELL_PID" 2>/dev/null || true
+          sleep 2
+
+          /tmp/stremio-linux-shell/target/release/stremio-linux-shell \
+            --url http://127.0.0.1:4173/#/board \
+            > native-desktop-receipt/product-shell.log 2>&1 &
+          PRODUCT_SHELL_PID=$!
+          echo "$PRODUCT_SHELL_PID" > native-desktop-receipt/product-shell.pid
+          sleep 15
+          kill -0 "$PRODUCT_SHELL_PID"
+          import -display :99 -window root native-desktop-receipt/native-product-FIXTURE.png || true
+          grep -q "/${PRODUCT_COMMIT}/scripts/main.js" native-desktop-receipt/web-server.log
+          grep -q "/${PRODUCT_COMMIT}/binaries/stremio_core_web_bg.wasm" native-desktop-receipt/web-server.log
+
+          kill "$PRODUCT_SHELL_PID" 2>/dev/null || true
+          kill "$SERVER_PID" 2>/dev/null || true
+          kill "$XVFB_PID" 2>/dev/null || true
+          if [ -n "${DBUS_SESSION_BUS_PID:-}" ]; then kill "$DBUS_SESSION_BUS_PID" 2>/dev/null || true; fi
 
       - name: Preserve exact receipt
         if: always()
         shell: bash
         run: |
           mkdir -p native-desktop-receipt
+          cp source-binding.txt native-desktop-receipt/source-binding.txt 2>/dev/null || true
+          cp fixture-media-info.json native-desktop-receipt/fixture-media-info.json 2>/dev/null || true
           {
             cat source-binding.txt 2>/dev/null || true
             printf 'run %s\n' "$GITHUB_RUN_ID"
-            printf 'harness_sha256 '
-            sha256sum .github/native-desktop-acceptance/smoke.cjs | cut -d' ' -f1
+            printf 'fixture_sha256 '
+            sha256sum /tmp/web-product/build/native-desktop-fixture.mp4 2>/dev/null | cut -d' ' -f1 || true
+            printf 'fixture_harness_sha256 '
+            sha256sum .github/native-desktop-acceptance/native-desktop-fixture.html | cut -d' ' -f1
+            printf 'server_harness_sha256 '
+            sha256sum .github/native-desktop-acceptance/server.py | cut -d' ' -f1
           } > native-desktop-receipt/SOURCE.txt
-          cp source-binding.txt native-desktop-receipt/source-binding.txt 2>/dev/null || true
-          if [ -f native-desktop-receipt/shell.pid ]; then kill "$(cat native-desktop-receipt/shell.pid)" 2>/dev/null || true; fi
-          if [ -f native-desktop-receipt/web-server.pid ]; then kill "$(cat native-desktop-receipt/web-server.pid)" 2>/dev/null || true; fi
+          for pidfile in native-desktop-receipt/*.pid; do
+            [ -f "$pidfile" ] || continue
+            kill "$(cat "$pidfile")" 2>/dev/null || true
+          done
 
       - name: Upload native desktop receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-desktop-shell-acceptance
+          name: native-desktop-linux-shell-acceptance
           path: native-desktop-receipt/
           retention-days: 14
           if-no-files-found: error
