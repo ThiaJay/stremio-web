@@ -23,6 +23,7 @@ const useVideo = () => {
         muted: null,
         playbackSpeed: null,
         videoScale: null,
+        avSync: null,
         videoParams: null,
         hdrInfo: null,
         audioTracks: [],
@@ -163,6 +164,14 @@ const useVideo = () => {
         setProp('fullscreen', state);
     }, [setProp]);
 
+    const correctAvSync = React.useCallback((correction) => {
+        dispatch({
+            type: 'command',
+            commandName: 'correctAvSync',
+            commandArgs: correction,
+        });
+    }, [dispatch]);
+
     const setSubtitlesTextColor = React.useCallback((color) => {
         setProp('subtitlesTextColor', color);
         setProp('extraSubtitlesTextColor', color);
@@ -263,6 +272,7 @@ const useVideo = () => {
         setExtraSubtitlesTrack,
         setVideoScale,
         setFullscreen,
+        correctAvSync,
     };
 };
 
