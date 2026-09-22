@@ -124,7 +124,6 @@ probe.write_text(r'''.class public final Lcom/stremio/common/players/AvSyncProbe
 
     iget-object v3, p0, Lcom/stremio/common/players/AvSyncProbe;->handler:Landroid/os/Handler;
     invoke-virtual {v3, v2}, Landroid/os/Handler;->post(Ljava/lang/Runnable;)Z
-    pop
 
     :done
     return-void
