@@ -44,7 +44,7 @@ if len(companions) != 1:
 
 companion = companions[0]
 companion_code = companion.read_text()
-marker = ".method public final createPlayer("
+marker = ".method private final createPlayer("
 start = companion_code.find(marker)
 if start < 0:
     raise SystemExit("createPlayer method not found in Companion")
@@ -59,9 +59,8 @@ for line in lines:
         reg = line.split()[-1]
         patched.extend([
             "",
-            "    new-instance v0, Lcom/stremio/common/players/AvSyncProbe;",
-            f"    invoke-direct {{v0, {reg}}}, Lcom/stremio/common/players/AvSyncProbe;-><init>(Landroidx/media3/exoplayer/ExoPlayer;)V",
-            f"    invoke-interface {{{reg}, v0}}, Landroidx/media3/exoplayer/ExoPlayer;->setVideoFrameMetadataListener(Landroidx/media3/exoplayer/video/VideoFrameMetadataListener;)V",
+            f"    invoke-static {{{reg}}}, Lcom/stremio/common/players/AvSyncProbe;->attach(Landroidx/media3/exoplayer/ExoPlayer;)Landroidx/media3/exoplayer/ExoPlayer;",
+            f"    move-result-object {reg}",
             "",
         ])
         injected += 1
@@ -91,6 +90,15 @@ probe.write_text(r'''.class public final Lcom/stremio/common/players/AvSyncProbe
     iput v0, p0, Lcom/stremio/common/players/AvSyncProbe;->count:I
     return-void
 .end method
+
+.method public static attach(Landroidx/media3/exoplayer/ExoPlayer;)Landroidx/media3/exoplayer/ExoPlayer;
+    .locals 1
+    new-instance v0, Lcom/stremio/common/players/AvSyncProbe;
+    invoke-direct {v0, p0}, Lcom/stremio/common/players/AvSyncProbe;-><init>(Landroidx/media3/exoplayer/ExoPlayer;)V
+    invoke-interface {p0, v0}, Landroidx/media3/exoplayer/ExoPlayer;->setVideoFrameMetadataListener(Landroidx/media3/exoplayer/video/VideoFrameMetadataListener;)V
+    return-object p0
+.end method
+
 
 .method public onVideoFrameAboutToBeRendered(JJLandroidx/media3/common/Format;Landroid/media/MediaFormat;)V
     .locals 8
