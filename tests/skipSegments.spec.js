@@ -30,7 +30,7 @@ describe('getSkipSegmentTarget', () => {
         expect(getSkipSegmentTarget({
             ...valid,
             segment: { ...segment, kind },
-        })).toBe(244.5);
+        })).toBe(244500);
     });
 
     test.each([
@@ -77,7 +77,7 @@ describe('getSkipSegmentTarget', () => {
 describe('getSkipSegmentPopupOpen', () => {
     const state = {
         segment,
-        target: segment.to / 1000,
+        target: segment.to,
         nextVideoPopupOpen: false,
         dismissal: null,
     };
@@ -123,7 +123,7 @@ describe('shouldAutoSkipSegment', () => {
     test.each(['intro', 'recap', 'outro'])('auto skips a trusted active %s once', (kind) => {
         expect(shouldAutoSkipSegment({
             segment: { ...automatic, kind },
-            target: automatic.to / 1000,
+            target: automatic.to,
             dismissal: null,
             paused: false,
             nextVideoPopupOpen: false,
@@ -133,7 +133,7 @@ describe('shouldAutoSkipSegment', () => {
     test.each(['ask', 'never'])('does not auto skip in %s mode', (mode) => {
         expect(shouldAutoSkipSegment({
             segment: { ...automatic, mode },
-            target: automatic.to / 1000,
+            target: automatic.to,
             dismissal: null,
             paused: false,
             nextVideoPopupOpen: false,
@@ -143,14 +143,14 @@ describe('shouldAutoSkipSegment', () => {
     test('does not auto skip while paused or while Next Episode has priority', () => {
         expect(shouldAutoSkipSegment({
             segment: automatic,
-            target: automatic.to / 1000,
+            target: automatic.to,
             dismissal: null,
             paused: true,
             nextVideoPopupOpen: false,
         })).toBe(false);
         expect(shouldAutoSkipSegment({
             segment: automatic,
-            target: automatic.to / 1000,
+            target: automatic.to,
             dismissal: null,
             paused: false,
             nextVideoPopupOpen: true,
@@ -166,7 +166,7 @@ describe('shouldAutoSkipSegment', () => {
         };
         expect(shouldAutoSkipSegment({
             segment: automatic,
-            target: automatic.to / 1000,
+            target: automatic.to,
             dismissal,
             paused: false,
             nextVideoPopupOpen: false,

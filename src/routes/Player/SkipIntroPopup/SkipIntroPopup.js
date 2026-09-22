@@ -18,7 +18,7 @@ const SkipIntroPopup = ({ className, kind, onDismiss, onSkipRequested }) => {
             case 'recap':
                 return t('PLAYER_SKIP_RECAP', { defaultValue: 'Skip Recap' });
             case 'outro':
-                return t('PLAYER_SKIP_OUTRO', { defaultValue: 'Skip Credits' });
+                return t('PLAYER_SKIP_CREDITS', { defaultValue: 'Skip Credits' });
             case 'intro':
             default:
                 return t('PLAYER_SKIP_INTRO', { defaultValue: 'Skip Intro' });

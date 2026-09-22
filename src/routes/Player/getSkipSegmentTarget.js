@@ -1,7 +1,5 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const MILLISECONDS_PER_SECOND = 1000;
-
 const getSkipSegmentTarget = ({
     segment,
     livePlayback,
@@ -32,7 +30,7 @@ const getSkipSegmentTarget = ({
         return null;
     }
 
-    return segment.seekTo / MILLISECONDS_PER_SECOND;
+    return segment.seekTo;
 };
 
 module.exports = getSkipSegmentTarget;
