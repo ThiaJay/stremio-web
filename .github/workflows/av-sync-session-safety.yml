@@ -1,0 +1,87 @@
+name: Integrated A V session safety
+on:
+  push:
+    branches: [feat/av-sync-session-safety]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: integrated-av-sync-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Integrate the immutable Core and native candidates
+        run: node scripts/integrate-av-sync-v2.cjs
+      - name: Generate and verify dependency integrity
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm install --frozen-lockfile
+      - name: Verify the installed native adapter
+        run: |
+          node - <<'NODE'
+          const assert = require('node:assert/strict');
+          const path = require('node:path');
+          const root = path.dirname(require.resolve('@stremio/stremio-video/package.json'));
+          const shell = require(path.join(root, 'src/ShellVideo/ShellVideo.js'));
+          assert.ok(shell.manifest.props.includes('avSyncV2'));
+          assert.ok(shell.manifest.commands.includes('correctAvSyncV2'));
+          assert.ok(!shell.manifest.commands.includes('correctAvSync'));
+          console.log('Installed native dependency exposes only the guarded recovery protocol');
+          NODE
+      - name: Build
+        run: pnpm build
+      - name: Test
+        run: pnpm test --runInBand
+      - name: Lint
+        run: pnpm lint
+      - name: Retain exact validated integration inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: av-sync-web-inputs
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            package.json
+            pnpm-lock.yaml
+            src/routes/Player/Player.js
+            src/routes/Player/useVideo.js
+            src/core/types/models/Player.d.ts
+  persist:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: av-sync-web-inputs
+      - name: Save only validated integration files on this branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/ThiaJay/stremio-web/git/ref/heads/feat/av-sync-session-safety --jq .object.sha)" = "$EXPECTED_SHA"
+          git add -- package.json pnpm-lock.yaml src/routes/Player/Player.js src/routes/Player/useVideo.js src/core/types/models/Player.d.ts
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Lock validated Core and native A/V recovery integration'
+          git -c credential.helper='!gh auth git-credential' push origin HEAD:refs/heads/feat/av-sync-session-safety
