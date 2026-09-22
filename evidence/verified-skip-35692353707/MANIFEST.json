@@ -1,0 +1,25 @@
+{
+  "status": "BROWSER_FIXTURE_ACCEPTED",
+  "date": "2026-09-22",
+  "web_base": "260abb77e1853f4c209248cc1c2c9fe616cc90f7",
+  "web_commit": "44bd8adc00f4d7eeffcf93fa9134718b2f7ba4d4",
+  "core_commit": "0f79a903f39a0c83365b276fecc7b23d74d2db6d",
+  "validation_run": 35692353707,
+  "runtime_cases": 31,
+  "unit_tests": 156,
+  "unit_suites": 7,
+  "lint_errors": 0,
+  "lint_warnings": 264,
+  "native_device_acceptance": false,
+  "scope": "Actual compiled Web client and Core worker with controlled provider fixtures and lawful local test media. No native Android or Android TV device acceptance and no real provider coverage is claimed.",
+  "build_sha256": "64920170660633c1caa1bab5a4ee1cd79cf3740d8adb3b85c91abcf234b1e704",
+  "core_package_sha256": "1c80d1010ed55ddedaada0fd45208bd584eb5543ef32fc55e8cd6ae8507df21f",
+  "files": {
+    "runtime-harness.cjs": "310ca773f836734f81d0074ac2cc1265442e06681c70bbca3237d2d722998a85",
+    "web-source.patch": "b49b9e2454d7441b0362db5e7daceda7618a20939f7957170f8e0c9e01f7c6ae",
+    "SOURCE.txt": "6b485179320e0c5c6630f4e19cbc6ecdfbcb0278f88a8d0ff2c6cb220e9a3a74",
+    "credits-FIXTURE.png": "79e0f47cc47614806be32157819b6bc4bd8ec3539a168b386c13d9724acbe925",
+    "RESULTS.json": "c8ab8c455945b451573e18aad09e232a5b00afe9eff2076a18f5c28e9ad93f54",
+    "intro-FIXTURE.png": "c125d0582f6c82edcbf7e6f0576d7c7e639af4ff9f61dc2fddad4ba26b562b63"
+  }
+}

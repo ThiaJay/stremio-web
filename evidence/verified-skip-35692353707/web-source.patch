@@ -1,0 +1,685 @@
+diff --git a/src/routes/Player/Player.js b/src/routes/Player/Player.js
+index 4987b88..bcdc539 100644
+--- a/src/routes/Player/Player.js
++++ b/src/routes/Player/Player.js
+@@ -46,6 +46,8 @@ const getEndPlaybackTransition = require('./getEndPlaybackTransition');
+ const getSkipSegmentTarget = require('./getSkipSegmentTarget');
+ const getSkipSegmentPopupOpen = require('./getSkipSegmentPopupOpen');
+ const shouldAutoSkipSegment = require('./shouldAutoSkipSegment');
++const createSkipSegmentAttempt = require('./createSkipSegmentAttempt');
++const commitSkipSegment = require('./commitSkipSegment');
+ 
+ const GAMEPAD_HANDLER_ID = 'player';
+ 
+@@ -138,15 +140,21 @@ const Player = () => {
+         player.selected?.streamRequest?.path?.id !== undefined &&
+         player.libraryItem.state.video_id === player.selected.streamRequest.path.id &&
+         (skipSegment === null || skipSegment.videoId === player.selected.streamRequest.path.id);
+-    const skipSegmentTarget = getSkipSegmentTarget({
++    const skipSegmentAttempt = React.useMemo(createSkipSegmentAttempt, []);
++    const skipSegmentPlayback = React.useMemo(() => ({
+         segment: skipSegment,
++        time: video.state.time,
++        duration: video.state.duration,
++        mode: settings.skipIntroMode ?? 'ask',
+         livePlayback,
+         canSeek,
+         streamReady: player.stream?.type === 'Ready' &&
+             video.state.stream !== null &&
+             video.state.loaded === true,
+         currentVideoMatches,
+-    });
++    }), [skipSegment, video.state.time, video.state.duration, settings.skipIntroMode,
++        livePlayback, canSeek, player.stream?.type, video.state.stream, video.state.loaded, currentVideoMatches]);
++    const skipSegmentTarget = skipSegmentAttempt.has(skipSegment) ? null : getSkipSegmentTarget(skipSegmentPlayback);
+     const skipSegmentPopupOpen = getSkipSegmentPopupOpen({
+         segment: skipSegment,
+         target: skipSegmentTarget,
+@@ -154,6 +162,8 @@ const Player = () => {
+         dismissal: skipSegmentPopupDismissal,
+     });
+     const autoSkipSegment = shouldAutoSkipSegment({
++        paused: video.state.paused,
++        nextVideoPopupOpen,
+         segment: skipSegment,
+         target: skipSegmentTarget,
+         dismissal: skipSegmentPopupDismissal,
+@@ -162,8 +172,8 @@ const Player = () => {
+     const [sideDrawerOpen, , closeSideDrawer, toggleSideDrawer] = useBinaryState(false);
+ 
+     const menusOpen = React.useMemo(() => {
+-        return optionsMenuOpen || subtitlesMenuOpen || audioMenuOpen || speedMenuOpen || statisticsMenuOpen || castDevicesMenuOpen || sideDrawerOpen || nextVideoPopupOpen || skipSegmentPopupOpen;
+-    }, [optionsMenuOpen, subtitlesMenuOpen, audioMenuOpen, speedMenuOpen, statisticsMenuOpen, castDevicesMenuOpen, sideDrawerOpen, nextVideoPopupOpen, skipSegmentPopupOpen]);
++        return optionsMenuOpen || subtitlesMenuOpen || audioMenuOpen || speedMenuOpen || statisticsMenuOpen || castDevicesMenuOpen || sideDrawerOpen || nextVideoPopupOpen;
++    }, [optionsMenuOpen, subtitlesMenuOpen, audioMenuOpen, speedMenuOpen, statisticsMenuOpen, castDevicesMenuOpen, sideDrawerOpen, nextVideoPopupOpen]);
+ 
+     const closeMenus = React.useCallback(() => {
+         closeOptionsMenu();
+@@ -347,42 +357,44 @@ const Player = () => {
+         seek(target, video.state.duration, video.state.manifest?.name);
+     }, [canSeek, seekStart, seekEnd, video.state.duration, video.state.manifest]);
+     const onDismissSkipSegmentPopup = React.useCallback(() => {
+-        if (skipSegment === null) {
+-            return;
+-        }
+-
++        if (skipSegment === null) return false;
++        skipSegmentAttempt.claim(skipSegment);
+         setSkipSegmentPopupDismissal({
+-            generation: skipSegment.generation,
+-            kind: skipSegment.kind,
+-            from: skipSegment.from,
+-            to: skipSegment.to,
++            generation: skipSegment.generation, videoId: skipSegment.videoId,
++            kind: skipSegment.kind, from: skipSegment.from, to: skipSegment.to,
+         });
+-        core.transport.dispatch({
+-            action: 'Player',
+-            args: {
+-                action: 'DismissSkipSegment',
++        try {
++            Promise.resolve(core.transport.dispatch({
++                action: 'Player',
+                 args: {
+-                    generation: skipSegment.generation,
+-                    kind: skipSegment.kind,
+-                    from: skipSegment.from,
+-                    to: skipSegment.to,
++                    action: 'DismissSkipSegment',
++                    args: { generation: skipSegment.generation, kind: skipSegment.kind,
++                        from: skipSegment.from, to: skipSegment.to },
+                 },
+-            },
+-        });
+-    }, [skipSegment, core.transport]);
++            }, 'player')).catch((error) => onError({ critical: false, message: error.message }));
++            return true;
++        } catch (error) {
++            onError({ critical: false, message: error.message });
++            return false;
++        }
++    }, [skipSegment, skipSegmentAttempt, core.transport, onError]);
+ 
+     const onSkipSegmentRequested = React.useCallback(() => {
+-        if (skipSegmentTarget !== null) {
+-            onDismissSkipSegmentPopup();
+-            commitSeek(skipSegmentTarget);
+-        }
+-    }, [skipSegmentTarget, onDismissSkipSegmentPopup, commitSeek]);
++        const target = getSkipSegmentTarget(skipSegmentPlayback);
++        if (target === null || nextVideoPopupOpen) return;
++        commitSkipSegment({
++            segment: skipSegment, target, attempt: skipSegmentAttempt,
++            dismiss: onDismissSkipSegmentPopup, seek: commitSeek,
++            onError: (error) => onError({ critical: false, message: error.message }),
++        });
++    }, [skipSegmentPlayback, skipSegment, nextVideoPopupOpen, skipSegmentAttempt,
++        onDismissSkipSegmentPopup, commitSeek, onError]);
+ 
+     React.useEffect(() => {
+-        if (autoSkipSegment) {
++        if (autoSkipSegment && !menusOpen && error === null && !seeking) {
+             onSkipSegmentRequested();
+         }
+-    }, [autoSkipSegment, onSkipSegmentRequested]);
++    }, [autoSkipSegment, menusOpen, error, seeking, onSkipSegmentRequested]);
+     const {
+         time: keyboardSeekTime,
+         seekBy: seekByKeyboard,
+@@ -1167,9 +1179,9 @@ const Player = () => {
+                 disabled={subtitlesMenuOpen || speedMenuOpen}
+             />
+             {
+-                skipSegmentPopupOpen && skipSegment !== null ?
++                skipSegmentPopupOpen && skipSegment !== null && !menusOpen && error === null ?
+                     <SkipIntroPopup
+-                        className={classnames(styles['layer'], styles['menu-layer'])}
++                        className={classnames(styles['layer'], styles['skip-segment-layer'])}
+                         kind={skipSegment.kind}
+                         onDismiss={onDismissSkipSegmentPopup}
+                         onSkipRequested={onSkipSegmentRequested}
+diff --git a/src/routes/Player/SkipIntroPopup/SkipIntroPopup.js b/src/routes/Player/SkipIntroPopup/SkipIntroPopup.js
+index 6217d35..ad41540 100644
+--- a/src/routes/Player/SkipIntroPopup/SkipIntroPopup.js
++++ b/src/routes/Player/SkipIntroPopup/SkipIntroPopup.js
+@@ -10,58 +10,56 @@ const styles = require('./styles');
+ 
+ const SkipIntroPopup = ({ className, kind, onDismiss, onSkipRequested }) => {
+     const { t } = useTranslation();
++    const rootRef = React.useRef(null);
+     const skipButtonRef = React.useRef(null);
+-    const [animationEnded, setAnimationEnded] = React.useState(false);
+-
+-    const label = React.useMemo(() => {
+-        switch (kind) {
+-            case 'recap':
+-                return t('PLAYER_SKIP_RECAP', { defaultValue: 'Skip Recap' });
+-            case 'outro':
+-                return t('PLAYER_SKIP_OUTRO', { defaultValue: 'Skip Credits' });
+-            case 'intro':
+-            default:
+-                return t('PLAYER_SKIP_INTRO', { defaultValue: 'Skip Intro' });
+-        }
+-    }, [kind, t]);
++    const label = kind === 'recap' ? t('PLAYER_SKIP_RECAP', { defaultValue: 'Skip Recap' }) :
++        kind === 'outro' ? t('PLAYER_SKIP_CREDITS', { defaultValue: 'Skip Credits' }) :
++            t('PLAYER_SKIP_INTRO', { defaultValue: 'Skip Intro' });
+ 
+     React.useLayoutEffect(() => {
+-        if (animationEnded && skipButtonRef.current !== null) {
+-            skipButtonRef.current.focus();
++        const root = rootRef.current;
++        const previous = document.activeElement;
++        if (previous === document.body || previous === document.documentElement) {
++            skipButtonRef.current?.focus({ preventScroll: true });
+         }
+-    }, [animationEnded]);
++        return () => {
++            if (root?.contains(document.activeElement) && previous instanceof HTMLElement && previous.isConnected) {
++                previous.focus({ preventScroll: true });
++            }
++        };
++    }, []);
+ 
+-    const onDismissButtonClick = React.useCallback(() => {
+-        if (typeof onDismiss === 'function') {
+-            onDismiss();
++    const onKeyDown = React.useCallback((event) => {
++        if (['Enter', ' ', 'Escape', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
++            event.preventDefault();
++            event.stopPropagation();
++            event.nativeEvent.buttonClickPrevented = true;
++            if (event.repeat) return;
++            if (event.key === 'Escape') {
++                onDismiss?.();
++            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
++                const buttons = Array.from(rootRef.current?.querySelectorAll('[role="button"]') || []);
++                const index = buttons.indexOf(document.activeElement);
++                buttons[(index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
++            } else {
++                event.currentTarget.click();
++            }
+         }
+     }, [onDismiss]);
+ 
+-    const onSkipButtonClick = React.useCallback(() => {
+-        if (typeof onSkipRequested === 'function') {
+-            onSkipRequested();
+-        }
+-    }, [onSkipRequested]);
+-
+     return (
+-        <div
+-            className={classnames(className, styles['skip-intro-popup-container'])}
+-            onAnimationEnd={() => setAnimationEnded(true)}
+-        >
++        <div ref={rootRef} role={'group'} aria-label={label}
++            className={classnames(className, styles['skip-intro-popup-container'])}>
+             <div className={styles['title']}>{label}</div>
+             <div className={styles['buttons-container']}>
+-                <Button
+-                    className={classnames(styles['button-container'], styles['dismiss'])}
+-                    onClick={onDismissButtonClick}
+-                >
++                <Button role={'button'} className={classnames(styles['button-container'], styles['dismiss'])}
++                    onKeyDown={onKeyDown} onClick={onDismiss}>
+                     <Icon className={styles['icon']} name={'close'} />
+                     <div className={styles['label']}>{t('PLAYER_NEXT_VIDEO_BUTTON_DISMISS')}</div>
+                 </Button>
+-                <Button
+-                    ref={skipButtonRef}
++                <Button ref={skipButtonRef} role={'button'}
+                     className={classnames(styles['button-container'], styles['skip-button'])}
+-                    onClick={onSkipButtonClick}
+-                >
++                    onKeyDown={onKeyDown} onClick={onSkipRequested}>
+                     <Icon className={styles['icon']} name={'next'} />
+                     <div className={styles['label']}>{label}</div>
+                 </Button>
+diff --git a/src/routes/Player/SkipIntroPopup/styles.less b/src/routes/Player/SkipIntroPopup/styles.less
+index 9adf083..bf3d302 100644
+--- a/src/routes/Player/SkipIntroPopup/styles.less
++++ b/src/routes/Player/SkipIntroPopup/styles.less
+@@ -6,20 +6,6 @@
+     gap: 1rem;
+     width: 26rem;
+     padding: 1.5rem;
+-    animation: slide-fade-in 0.5s ease-in;
+-
+-    @keyframes slide-fade-in {
+-        0% {
+-            opacity: 0;
+-            transform: translateX(28rem);
+-        }
+-
+-        100% {
+-            opacity: 1;
+-            transform: translateX(0);
+-        }
+-    }
+-
+     .title {
+         font-size: 1.2rem;
+         font-weight: 600;
+diff --git a/src/routes/Player/commitSkipSegment.js b/src/routes/Player/commitSkipSegment.js
+new file mode 100644
+index 0000000..ffa0049
+--- /dev/null
++++ b/src/routes/Player/commitSkipSegment.js
+@@ -0,0 +1,22 @@
++// Copyright (C) 2017-2023 Smart code 203358507
++
++const { getSegmentKey } = require('./skipSegmentIdentity');
++
++// Consume in Core before seeking beyond the descriptor. A lost acknowledgement
++// never authorises replaying the media command.
++const commitSkipSegment = ({ segment, target, attempt, dismiss, seek, onError } = {}) => {
++    if (getSegmentKey(segment) === null || !Number.isSafeInteger(target) ||
++        target !== segment.to || target !== segment.seekTo || target <= 0 ||
++        typeof attempt?.claim !== 'function' || typeof dismiss !== 'function' ||
++        typeof seek !== 'function' || !attempt.claim(segment)) return false;
++    try {
++        if (dismiss() === false) return false;
++        seek(target);
++        return true;
++    } catch (error) {
++        onError?.(error);
++        return false;
++    }
++};
++
++module.exports = commitSkipSegment;
+diff --git a/src/routes/Player/createSkipSegmentAttempt.js b/src/routes/Player/createSkipSegmentAttempt.js
+new file mode 100644
+index 0000000..dfd4703
+--- /dev/null
++++ b/src/routes/Player/createSkipSegmentAttempt.js
+@@ -0,0 +1,27 @@
++// Copyright (C) 2017-2023 Smart code 203358507
++
++const { getSegmentKey } = require('./skipSegmentIdentity');
++
++// Synchronous claims cover double clicks, effect replay and revisiting earlier segments.
++// Unknown actuator outcomes stay claimed. Capacity is bounded per playback lifecycle.
++const createSkipSegmentAttempt = () => {
++    let generation = 0;
++    const consumed = new Set();
++    const has = (segment) => {
++        const key = getSegmentKey(segment);
++        return key === null || segment.generation < generation ||
++            (segment.generation === generation && (consumed.has(key) || consumed.size >= 64));
++    };
++    const claim = (segment) => {
++        if (has(segment)) return false;
++        if (segment.generation > generation) {
++            generation = segment.generation;
++            consumed.clear();
++        }
++        consumed.add(getSegmentKey(segment));
++        return true;
++    };
++    return { has, claim };
++};
++
++module.exports = createSkipSegmentAttempt;
+diff --git a/src/routes/Player/getSkipSegmentPopupOpen.js b/src/routes/Player/getSkipSegmentPopupOpen.js
+index 4f39910..e84cc01 100644
+--- a/src/routes/Player/getSkipSegmentPopupOpen.js
++++ b/src/routes/Player/getSkipSegmentPopupOpen.js
+@@ -1,23 +1,11 @@
+ // Copyright (C) 2017-2023 Smart code 203358507
+ 
+-const sameSegment = (dismissal, segment) => dismissal !== null &&
+-    dismissal.generation === segment.generation &&
+-    dismissal.kind === segment.kind &&
+-    dismissal.from === segment.from &&
+-    dismissal.to === segment.to;
++const { getSegmentKey, sameSegment } = require('./skipSegmentIdentity');
+ 
+-const getSkipSegmentPopupOpen = ({
+-    segment,
+-    target,
+-    nextVideoPopupOpen,
+-    dismissal,
+-}) => {
+-    if (segment === null || target === null || nextVideoPopupOpen) {
+-        return false;
+-    }
+-
+-    return (segment.mode ?? 'ask') === 'ask' &&
+-        !segment.dismissed &&
++const getSkipSegmentPopupOpen = ({ segment, target, nextVideoPopupOpen, dismissal } = {}) => {
++    return getSegmentKey(segment) !== null && Number.isSafeInteger(target) && target > 0 &&
++        target === segment.seekTo && target === segment.to && nextVideoPopupOpen === false &&
++        segment.mode === 'ask' && segment.active === true && segment.dismissed === false &&
+         !sameSegment(dismissal, segment);
+ };
+ 
+diff --git a/src/routes/Player/getSkipSegmentTarget.js b/src/routes/Player/getSkipSegmentTarget.js
+index c5b0143..2dca3e3 100644
+--- a/src/routes/Player/getSkipSegmentTarget.js
++++ b/src/routes/Player/getSkipSegmentTarget.js
+@@ -1,35 +1,26 @@
+ // Copyright (C) 2017-2023 Smart code 203358507
+ 
++const { getSegmentKey } = require('./skipSegmentIdentity');
++
++// Core resolves the segment. This only rechecks the current media actuator bounds.
+ const getSkipSegmentTarget = ({
+-    segment,
+-    livePlayback,
+-    canSeek,
+-    streamReady,
+-    currentVideoMatches,
+-}) => {
+-    if (livePlayback || !canSeek || !streamReady || !currentVideoMatches || segment === null) {
++    segment, time, duration, mode, livePlayback, canSeek, streamReady, currentVideoMatches,
++} = {}) => {
++    if (livePlayback !== false || canSeek !== true || streamReady !== true ||
++        currentVideoMatches !== true || getSegmentKey(segment) === null) {
+         return null;
+     }
+-
+-    if (!segment.active || segment.dismissed || segment.seekTo === null) {
++    if (segment.active !== true || segment.dismissed !== false ||
++        !['ask', 'always'].includes(segment.mode) || segment.mode !== mode ||
++        !Number.isSafeInteger(segment.duration) || !Number.isSafeInteger(segment.seekTo) ||
++        !Number.isSafeInteger(duration) || !Number.isFinite(time)) {
+         return null;
+     }
+-
+-    if (!Number.isFinite(segment.from) ||
+-        !Number.isFinite(segment.to) ||
+-        !Number.isFinite(segment.duration) ||
+-        !Number.isFinite(segment.seekTo)) {
++    if (duration <= 0 || segment.duration !== duration || segment.to > duration ||
++        (segment.kind !== 'outro' && segment.to === duration) ||
++        segment.seekTo !== segment.to || time < segment.from || time >= segment.to) {
+         return null;
+     }
+-
+-    if (segment.duration <= 0 ||
+-        segment.from < 0 ||
+-        segment.to <= segment.from ||
+-        segment.to > segment.duration ||
+-        segment.seekTo !== segment.to) {
+-        return null;
+-    }
+-
+     return segment.seekTo;
+ };
+ 
+diff --git a/src/routes/Player/shouldAutoSkipSegment.js b/src/routes/Player/shouldAutoSkipSegment.js
+index ae890e9..702d856 100644
+--- a/src/routes/Player/shouldAutoSkipSegment.js
++++ b/src/routes/Player/shouldAutoSkipSegment.js
+@@ -1,17 +1,12 @@
+ // Copyright (C) 2017-2023 Smart code 203358507
+ 
+-const sameSegment = (dismissal, segment) => dismissal !== null &&
+-    dismissal.generation === segment.generation &&
+-    dismissal.kind === segment.kind &&
+-    dismissal.from === segment.from &&
+-    dismissal.to === segment.to;
++const { getSegmentKey, sameSegment } = require('./skipSegmentIdentity');
+ 
+-const shouldAutoSkipSegment = ({ segment, target, dismissal }) => {
+-    return segment !== null &&
+-        target !== null &&
+-        (segment.mode ?? 'ask') === 'always' &&
+-        !segment.dismissed &&
+-        !sameSegment(dismissal, segment);
++const shouldAutoSkipSegment = ({ segment, target, dismissal, paused, nextVideoPopupOpen } = {}) => {
++    return getSegmentKey(segment) !== null && Number.isSafeInteger(target) && target > 0 &&
++        target === segment.seekTo && target === segment.to && paused === false &&
++        nextVideoPopupOpen === false && segment.mode === 'always' &&
++        segment.active === true && segment.dismissed === false && !sameSegment(dismissal, segment);
+ };
+ 
+ module.exports = shouldAutoSkipSegment;
+diff --git a/src/routes/Player/skipSegmentIdentity.js b/src/routes/Player/skipSegmentIdentity.js
+new file mode 100644
+index 0000000..bb274bf
+--- /dev/null
++++ b/src/routes/Player/skipSegmentIdentity.js
+@@ -0,0 +1,19 @@
++// Copyright (C) 2017-2023 Smart code 203358507
++
++const getSegmentKey = (segment) => {
++    if (!segment || !['intro', 'recap', 'outro'].includes(segment.kind) ||
++        !Number.isSafeInteger(segment.generation) || segment.generation <= 0 ||
++        typeof segment.videoId !== 'string' || !segment.videoId.length ||
++        !Number.isSafeInteger(segment.from) || !Number.isSafeInteger(segment.to) ||
++        segment.from < 0 || segment.to <= segment.from) {
++        return null;
++    }
++    return JSON.stringify([segment.generation, segment.videoId, segment.kind, segment.from, segment.to]);
++};
++
++const sameSegment = (dismissal, segment) => Boolean(dismissal && segment &&
++    dismissal.generation === segment.generation &&
++    dismissal.videoId === segment.videoId &&
++    dismissal.kind === segment.kind && dismissal.from === segment.from && dismissal.to === segment.to);
++
++module.exports = { getSegmentKey, sameSegment };
+diff --git a/src/routes/Player/styles.less b/src/routes/Player/styles.less
+index c60f552..ea5ff06 100644
+--- a/src/routes/Player/styles.less
++++ b/src/routes/Player/styles.less
+@@ -123,7 +123,7 @@ html:not(.active-slider-within) {
+             bottom: 10rem;
+         }
+ 
+-        &.menu-layer {
++        &.menu-layer, &.skip-segment-layer {
+             top: initial;
+             left: initial;
+             right: 4rem;
+@@ -160,7 +160,7 @@ html:not(.active-slider-within) {
+ @media (orientation: portrait) and (max-width: @minimum) {
+     .player-container {
+         .layer {
+-            &.menu-layer {
++            &.menu-layer, &.skip-segment-layer {
+                 right: 2.5rem;
+                 bottom: 11rem;
+             }
+diff --git a/tests/skipConsumption.spec.js b/tests/skipConsumption.spec.js
+new file mode 100644
+index 0000000..baafea8
+--- /dev/null
++++ b/tests/skipConsumption.spec.js
+@@ -0,0 +1,52 @@
++// Copyright (C) 2017-2023 Smart code 203358507
++
++const commit = require('../src/routes/Player/commitSkipSegment');
++const createAttempt = require('../src/routes/Player/createSkipSegmentAttempt');
++const segment = { kind: 'intro', generation: 2, videoId: 'episode', from: 1000, to: 7000, seekTo: 7000 };
++
++const fixture = () => {
++    const calls = [];
++    return { calls, args: { segment, target: 7000, attempt: createAttempt(),
++        dismiss: () => calls.push('consume'), seek: target => calls.push(target),
++        onError: () => calls.push('error') } };
++};
++
++test('Core consumption precedes the seek that removes the descriptor', () => {
++    const { args, calls } = fixture();
++    expect(commit(args)).toBe(true);
++    expect(calls).toEqual(['consume', 7000]);
++});
++test('failed synchronous Core dispatch cannot cause a media seek or replay', () => {
++    const { args, calls } = fixture();
++    args.dismiss = () => { throw new Error('dispatch unavailable'); };
++    expect(commit(args)).toBe(false);
++    expect(commit(args)).toBe(false);
++    expect(calls).toEqual(['error']);
++});
++test('explicitly rejected dismissal prevents the seek', () => {
++    const { args, calls } = fixture();
++    args.dismiss = () => false;
++    expect(commit(args)).toBe(false);
++    expect(calls).toEqual([]);
++});
++test('unknown media outcome remains consumed and cannot seek twice', () => {
++    const { args, calls } = fixture();
++    args.seek = () => { calls.push('seek'); throw new Error('acknowledgement lost'); };
++    expect(commit(args)).toBe(false);
++    expect(commit(args)).toBe(false);
++    expect(calls).toEqual(['consume', 'seek', 'error']);
++});
++test('rapid activation cannot duplicate Core consumption or media seek', () => {
++    const { args, calls } = fixture();
++    for (let index = 0; index < 100; index++) commit(args);
++    expect(calls).toEqual(['consume', 7000]);
++});
++test('malformed activation cannot claim or seek', () => {
++    expect(commit()).toBe(false);
++    const { args, calls } = fixture();
++    for (const target of [null, undefined, 0, -1, 7001, NaN, Infinity]) {
++        expect(commit({ ...args, target })).toBe(false);
++    }
++    expect(calls).toEqual([]);
++    expect(commit(args)).toBe(true);
++});
+diff --git a/tests/skipRuntimeSafety.spec.js b/tests/skipRuntimeSafety.spec.js
+new file mode 100644
+index 0000000..98bb64d
+--- /dev/null
++++ b/tests/skipRuntimeSafety.spec.js
+@@ -0,0 +1,88 @@
++// Copyright (C) 2017-2023 Smart code 203358507
++
++const target = require('../src/routes/Player/getSkipSegmentTarget');
++const popup = require('../src/routes/Player/getSkipSegmentPopupOpen');
++const automatic = require('../src/routes/Player/shouldAutoSkipSegment');
++const attempts = require('../src/routes/Player/createSkipSegmentAttempt');
++const { getSegmentKey } = require('../src/routes/Player/skipSegmentIdentity');
++const segment = { kind: 'intro', generation: 4, videoId: 'tt9999999:1:1', from: 10000,
++    to: 20000, duration: 120000, seekTo: 20000, mode: 'ask', active: true, dismissed: false };
++const valid = { segment, time: 15000, duration: 120000, mode: 'ask', livePlayback: false,
++    canSeek: true, streamReady: true, currentVideoMatches: true };
++
++describe('shared skip runtime safety', () => {
++    test('missing inputs never throw or offer a target', () => {
++        expect(target()).toBeNull(); expect(popup()).toBe(false); expect(automatic()).toBe(false);
++    });
++    test.each([9999, 20000, 20001, NaN, Infinity, null, undefined, '15000'])('stale local time %s cannot seek', (time) => {
++        expect(target({ ...valid, time })).toBeNull();
++    });
++    test.each([16000, 119999, 120001, NaN, Infinity, null, undefined])('changed actuator duration %s cannot seek', (duration) => {
++        expect(target({ ...valid, duration })).toBeNull();
++    });
++    test.each(['intro', 'recap', 'outro'])('valid shared %s target is preserved', (kind) => {
++        expect(target({ ...valid, segment: { ...segment, kind } })).toBe(20000);
++    });
++    test.each(['intro', 'recap'])('%s cannot terminate playback', (kind) => {
++        expect(target({ ...valid, segment: { ...segment, kind, to: 120000, seekTo: 120000 } })).toBeNull();
++    });
++    test('credits may end at duration as Core specifies', () => {
++        expect(target({ ...valid, segment: { ...segment, kind: 'outro', to: 120000, seekTo: 120000 } })).toBe(120000);
++    });
++    test.each([
++        { generation: 0 }, { generation: Number.MAX_SAFE_INTEGER + 1 }, { videoId: '' },
++        { kind: 'preview' }, { kind: 'unknown' }, { from: -1 }, { from: 10000.5 },
++        { to: Infinity }, { seekTo: 19999 }, { active: 1 }, { dismissed: 0 },
++        { mode: 'never' }, { mode: 'unknown' },
++    ])('malformed or stale descriptor fails closed', (change) => {
++        expect(target({ ...valid, segment: { ...segment, ...change } })).toBeNull();
++    });
++    test.each(['never', 'unknown', 'always', undefined])('pending preference change %s revokes stale Ask target', (mode) => {
++        expect(target({ ...valid, mode })).toBeNull();
++    });
++    test.each([true, null, undefined])('automatic action waits whilst paused state is %s', (paused) => {
++        expect(automatic({ segment: { ...segment, mode: 'always' }, target: 20000,
++            dismissal: null, paused, nextVideoPopupOpen: false })).toBe(false);
++    });
++    test('Next Video wins over automatic skipping too', () => {
++        expect(automatic({ segment: { ...segment, mode: 'always' }, target: 20000,
++            dismissal: null, paused: false, nextVideoPopupOpen: true })).toBe(false);
++    });
++    test('rapid activations are claimed once before asynchronous state updates', () => {
++        const ledger = attempts(); let count = 0;
++        for (let i = 0; i < 100; i++) if (ledger.claim(segment)) count++;
++        expect(count).toBe(1);
++    });
++    test('recap then intro then rewind cannot automatically replay recap', () => {
++        const ledger = attempts(); const recap = { ...segment, kind: 'recap' };
++        expect(ledger.claim(recap)).toBe(true); expect(ledger.claim(segment)).toBe(true);
++        expect(ledger.claim(recap)).toBe(false); expect(ledger.has(recap)).toBe(true);
++    });
++    test('new lifecycle permits actions and rejects late older lifecycle', () => {
++        const ledger = attempts(); ledger.claim(segment);
++        expect(ledger.claim({ ...segment, generation: 5 })).toBe(true);
++        expect(ledger.claim({ ...segment, kind: 'recap' })).toBe(false);
++    });
++    test('unknown seek outcomes cannot replay the claimed action', () => {
++        const ledger = attempts();
++        try { if (ledger.claim(segment)) throw new Error('lost acknowledgement'); } catch (_) { /* retained */ }
++        expect(ledger.claim(segment)).toBe(false);
++    });
++    test('untrusted changing evidence cannot grow the claim ledger without limit', () => {
++        const ledger = attempts();
++        for (let i = 0; i < 64; i++) expect(ledger.claim({ ...segment, from: i, to: i + 1 })).toBe(true);
++        expect(ledger.claim({ ...segment, from: 70, to: 80 })).toBe(false);
++        expect(ledger.claim({ ...segment, generation: 5 })).toBe(true);
++    });
++    test('dismissal includes the video identity', () => {
++        const args = { segment, target: 20000, nextVideoPopupOpen: false, dismissal: segment };
++        expect(popup(args)).toBe(false);
++        expect(popup({ ...args, dismissal: { ...segment, videoId: 'another-video' } })).toBe(true);
++        expect(getSegmentKey({ ...segment, videoId: 'another-video' })).not.toBe(getSegmentKey(segment));
++    });
++    test('boundary sweep never seeks outside the current window', () => {
++        for (let time = 0; time <= 120000; time += 97) {
++            expect(target({ ...valid, time })).toBe(time >= 10000 && time < 20000 ? 20000 : null);
++        }
++    });
++});
+diff --git a/tests/skipSegments.spec.js b/tests/skipSegments.spec.js
+index e1a5f13..18bc4cc 100644
+--- a/tests/skipSegments.spec.js
++++ b/tests/skipSegments.spec.js
+@@ -19,6 +19,9 @@ const segment = {
+ 
+ const valid = {
+     segment,
++    time: segment.from,
++    duration: segment.duration,
++    mode: 'ask',
+     livePlayback: false,
+     canSeek: true,
+     streamReady: true,
+@@ -105,6 +108,7 @@ describe('getSkipSegmentPopupOpen', () => {
+     test('local dismissal is bound to the exact Core segment generation', () => {
+         const dismissal = {
+             generation: segment.generation,
++            videoId: segment.videoId,
+             kind: segment.kind,
+             from: segment.from,
+             to: segment.to,
+@@ -125,6 +129,8 @@ describe('shouldAutoSkipSegment', () => {
+             segment: { ...automatic, kind },
+             target: automatic.to,
+             dismissal: null,
++            paused: false,
++            nextVideoPopupOpen: false,
+         })).toBe(true);
+     });
+ 
+@@ -133,12 +139,15 @@ describe('shouldAutoSkipSegment', () => {
+             segment: { ...automatic, mode },
+             target: automatic.to,
+             dismissal: null,
++            paused: false,
++            nextVideoPopupOpen: false,
+         })).toBe(false);
+     });
+ 
+     test('does not repeat an already consumed segment', () => {
+         const dismissal = {
+             generation: automatic.generation,
++            videoId: automatic.videoId,
+             kind: automatic.kind,
+             from: automatic.from,
+             to: automatic.to,
