@@ -2,3 +2,6 @@ minimumReleaseAgeExclude:
   - '@stremio/*'
 
 blockExoticSubdeps: false
+
+patchedDependencies:
+  '@stremio/stremio-video@0.0.98': patches/stremio_video_0_0_98.patch

@@ -74,7 +74,7 @@ const Player = () => {
         return queryParams.has('forceTranscoding');
     }, [queryParams]);
     const profile = useProfile();
-    const [player, videoParamsChanged, streamStateChanged, audioPreferenceChanged, subtitlePreferenceChanged, videoScaleChanged, timeChanged, seek, pausedChanged, ended, nextVideo] = usePlayer(urlParams);
+    const [player, videoParamsChanged, streamStateChanged, audioPreferenceChanged, subtitlePreferenceChanged, videoScaleChanged, timeChanged, seek, pausedChanged, ended, nextVideo, avSyncObserved, playbackHealthObserved] = usePlayer(urlParams);
     const [settings] = useSettings();
     const streamingServer = useStreamingServer();
     const statistics = useStatistics(player, streamingServer);
@@ -86,6 +86,101 @@ const Player = () => {
     const discordTimestamps = React.useRef(EMPTY_DISCORD_TIMESTAMPS);
 
     const [seeking, setSeeking] = React.useState(false);
+
+    const appliedAvSyncCorrection = React.useRef({ stream: null, generation: 0 });
+
+    React.useEffect(() => {
+        const observation = video.state.avSync;
+        if (observation === null || typeof observation !== 'object' || !Number.isFinite(observation.offsetMs)) {
+            return;
+        }
+
+        avSyncObserved({
+            offsetMs: observation.offsetMs,
+            buffering: observation.buffering === true || video.state.buffering === true,
+            seeking: observation.seeking === true || seeking,
+            refreshRateSwitching: observation.refreshRateSwitching === true,
+            canSoftCorrect: observation.canSoftCorrect === true,
+            canHardCorrect: observation.canHardCorrect === true,
+        });
+    }, [video.state.avSync, video.state.buffering, seeking, avSyncObserved]);
+
+    React.useEffect(() => {
+        const sync = player.avSync;
+        const stream = video.state.stream;
+
+        if (appliedAvSyncCorrection.current.stream !== stream) {
+            appliedAvSyncCorrection.current = { stream, generation: 0 };
+        }
+
+        if (
+            sync === null ||
+            typeof sync !== 'object' ||
+            sync.correction === undefined ||
+            !Number.isSafeInteger(sync.generation) ||
+            sync.generation <= appliedAvSyncCorrection.current.generation ||
+            !video.state.manifest?.commands?.includes('correctAvSync')
+        ) {
+            return;
+        }
+
+        video.correctAvSync({
+            correction: sync.correction,
+            offsetMs: sync.offsetMs,
+            generation: sync.generation,
+        });
+        appliedAvSyncCorrection.current.generation = sync.generation;
+    }, [player.avSync, video.state.stream, video.state.manifest, video.correctAvSync]);
+
+    const appliedPlaybackRecovery = React.useRef({ stream: null, generation: 0 });
+
+    React.useEffect(() => {
+        const observation = video.state.playbackHealth;
+        if (observation === null || typeof observation !== 'object') {
+            return;
+        }
+
+        playbackHealthObserved({
+            engine: typeof observation.engine === 'string' ? observation.engine : undefined,
+            audioCodec: typeof observation.audioCodec === 'string' ? observation.audioCodec : undefined,
+            audioExpected: observation.audioExpected === true,
+            audioPresent: observation.audioPresent === true,
+            videoStable: observation.videoStable !== false,
+            transient: observation.transient === true || video.state.buffering === true || seeking,
+            canTranscodeAudio: observation.canTranscodeAudio === true,
+            canSwitchEngine: observation.canSwitchEngine === true,
+            canRestoreStableVideo: observation.canRestoreStableVideo === true,
+            canSwitchStream: observation.canSwitchStream === true,
+        });
+    }, [video.state.playbackHealth, video.state.buffering, seeking, playbackHealthObserved]);
+
+    React.useEffect(() => {
+        const health = player.playbackHealth;
+        const stream = video.state.stream;
+
+        if (appliedPlaybackRecovery.current.stream !== stream) {
+            appliedPlaybackRecovery.current = { stream, generation: 0 };
+        }
+
+        if (
+            health === null ||
+            typeof health !== 'object' ||
+            health.recovery === undefined ||
+            !Number.isSafeInteger(health.generation) ||
+            health.generation <= appliedPlaybackRecovery.current.generation ||
+            !video.state.manifest?.commands?.includes('recoverPlayback')
+        ) {
+            return;
+        }
+
+        video.recoverPlayback({
+            recovery: health.recovery,
+            generation: health.generation,
+            engine: health.engine,
+            audioCodec: health.audioCodec,
+        });
+        appliedPlaybackRecovery.current.generation = health.generation;
+    }, [player.playbackHealth, video.state.stream, video.state.manifest, video.recoverPlayback]);
 
     const [casting, setCasting] = React.useState(() => {
         return services.chromecast.active && services.chromecast.transport.getCastState() === cast.framework.CastState.CONNECTED;
