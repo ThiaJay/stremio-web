@@ -122,7 +122,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                         {...nextVideoPopupDurationSelect}
                     />
                 </Option>
-                <Option label={'PLAYER_SKIP_INTRO'}>
+                <Option label={t('PLAYER_SKIP_SEGMENTS', { defaultValue: 'Skip Intro, Recap and Credits' })}>
                     <MultiselectMenu
                         className={'multiselect'}
                         {...skipIntroModeSelect}
