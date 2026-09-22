@@ -254,12 +254,13 @@ const Player = () => {
         const transition = getEndPlaybackTransition({
             isEpg,
             hasNextVideo: player.nextVideo !== null,
+            hasPlayableNextVideo: player.nextVideo?.deepLinks?.player != null,
             bingeWatching: profile.settings.bingeWatching,
         });
 
         if (transition === 'advance' && player.nextVideo !== null) {
             nextVideo();
-            handleNextVideoNavigation(player.nextVideo.deepLinks, true, true);
+            navigate(toPath(player.nextVideo.deepLinks.player), { replace: true });
         } else if (transition === 'back') {
             goBack();
         }
