@@ -43,15 +43,32 @@ const SkipIntroPopup = ({ className, kind, onDismiss, onSkipRequested }) => {
         }
     }, [onSkipRequested]);
 
+    const onActionKeyDown = React.useCallback((event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            onDismissButtonClick();
+        } else if (event.key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.click();
+        }
+    }, [onDismissButtonClick]);
+
     return (
         <div
             className={classnames(className, styles['skip-intro-popup-container'])}
+            role={'group'}
+            aria-label={label}
             onAnimationEnd={() => setAnimationEnded(true)}
         >
             <div className={styles['title']}>{label}</div>
             <div className={styles['buttons-container']}>
                 <Button
                     className={classnames(styles['button-container'], styles['dismiss'])}
+                    role={'button'}
+                    aria-label={t('PLAYER_NEXT_VIDEO_BUTTON_DISMISS')}
+                    onKeyDown={onActionKeyDown}
                     onClick={onDismissButtonClick}
                 >
                     <Icon className={styles['icon']} name={'close'} />
@@ -60,6 +77,9 @@ const SkipIntroPopup = ({ className, kind, onDismiss, onSkipRequested }) => {
                 <Button
                     ref={skipButtonRef}
                     className={classnames(styles['button-container'], styles['skip-button'])}
+                    role={'button'}
+                    aria-label={label}
+                    onKeyDown={onActionKeyDown}
                     onClick={onSkipButtonClick}
                 >
                     <Icon className={styles['icon']} name={'next'} />
