@@ -67,6 +67,31 @@ type AvSyncState = {
     generation: number,
 };
 
+type PlaybackRecoveryAction = 'transcodeAudio' | 'switchPlaybackEngine' | 'restoreStableVideoAndTranscodeAudio' | 'switchStream';
+
+type PlaybackHealthStatus = 'healthy' | 'monitoring' | 'recovering' | 'exhausted';
+
+type PlaybackHealthObservation = {
+    engine?: string,
+    audioCodec?: string,
+    audioExpected?: boolean,
+    audioPresent?: boolean,
+    videoStable?: boolean,
+    transient?: boolean,
+    canTranscodeAudio?: boolean,
+    canSwitchEngine?: boolean,
+    canRestoreStableVideo?: boolean,
+    canSwitchStream?: boolean,
+};
+
+type PlaybackHealthState = {
+    status: PlaybackHealthStatus,
+    recovery?: PlaybackRecoveryAction,
+    generation: number,
+    engine?: string,
+    audioCodec?: string,
+};
+
 type VideoScale = 'contain' | 'cover' | 'fill';
 
 type SubtitleSource = 'embedded' | 'external';
@@ -104,6 +129,7 @@ type Player = {
     subtitlePreference: SubtitlePreference | null,
     videoScale: VideoScale | null,
     avSync: AvSyncState,
+    playbackHealth: PlaybackHealthState,
     subtitles: Subtitle[],
     title: string | null,
 };
