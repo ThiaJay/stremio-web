@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           java -jar /tmp/apktool.jar d -f --no-res -o /tmp/decoded /tmp/stremio.apk >/tmp/apktool.log
-          target="$(grep -R -l 'Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory;' /tmp/decoded/smali* | head -1)"
+          target="$(find /tmp/decoded -type f -path '*/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory.smali' -print -quit)"
           test -n "$target"
           echo "TARGET=$target"
           python - "$target" <<'PY'
