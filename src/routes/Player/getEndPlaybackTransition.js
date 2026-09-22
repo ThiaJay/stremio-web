@@ -3,17 +3,22 @@
 const getEndPlaybackTransition = ({
     isEpg,
     hasNextVideo,
+    hasPlayableNextVideo,
     bingeWatching,
 }) => {
     if (isEpg) {
         return 'none';
     }
 
-    if (hasNextVideo && bingeWatching) {
+    if (!hasNextVideo) {
+        return 'back';
+    }
+
+    if (bingeWatching && hasPlayableNextVideo) {
         return 'advance';
     }
 
-    return 'back';
+    return 'stay';
 };
 
 module.exports = getEndPlaybackTransition;
