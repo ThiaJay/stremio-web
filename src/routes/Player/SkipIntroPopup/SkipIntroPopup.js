@@ -8,10 +8,22 @@ const { Button } = require('stremio/components');
 const { useTranslation } = require('react-i18next');
 const styles = require('./styles');
 
-const SkipIntroPopup = ({ className, onDismiss, onSkipIntroRequested }) => {
+const SkipIntroPopup = ({ className, kind, onDismiss, onSkipRequested }) => {
     const { t } = useTranslation();
     const skipButtonRef = React.useRef(null);
     const [animationEnded, setAnimationEnded] = React.useState(false);
+
+    const label = React.useMemo(() => {
+        switch (kind) {
+            case 'recap':
+                return t('PLAYER_SKIP_RECAP', { defaultValue: 'Skip Recap' });
+            case 'outro':
+                return t('PLAYER_SKIP_OUTRO', { defaultValue: 'Skip Credits' });
+            case 'intro':
+            default:
+                return t('PLAYER_SKIP_INTRO', { defaultValue: 'Skip Intro' });
+        }
+    }, [kind, t]);
 
     React.useLayoutEffect(() => {
         if (animationEnded && skipButtonRef.current !== null) {
@@ -26,17 +38,17 @@ const SkipIntroPopup = ({ className, onDismiss, onSkipIntroRequested }) => {
     }, [onDismiss]);
 
     const onSkipButtonClick = React.useCallback(() => {
-        if (typeof onSkipIntroRequested === 'function') {
-            onSkipIntroRequested();
+        if (typeof onSkipRequested === 'function') {
+            onSkipRequested();
         }
-    }, [onSkipIntroRequested]);
+    }, [onSkipRequested]);
 
     return (
         <div
             className={classnames(className, styles['skip-intro-popup-container'])}
             onAnimationEnd={() => setAnimationEnded(true)}
         >
-            <div className={styles['title']}>{t('PLAYER_SKIP_INTRO')}</div>
+            <div className={styles['title']}>{label}</div>
             <div className={styles['buttons-container']}>
                 <Button
                     className={classnames(styles['button-container'], styles['dismiss'])}
@@ -51,7 +63,7 @@ const SkipIntroPopup = ({ className, onDismiss, onSkipIntroRequested }) => {
                     onClick={onSkipButtonClick}
                 >
                     <Icon className={styles['icon']} name={'next'} />
-                    <div className={styles['label']}>{t('PLAYER_SKIP_INTRO')}</div>
+                    <div className={styles['label']}>{label}</div>
                 </Button>
             </div>
         </div>
@@ -60,8 +72,9 @@ const SkipIntroPopup = ({ className, onDismiss, onSkipIntroRequested }) => {
 
 SkipIntroPopup.propTypes = {
     className: PropTypes.string,
+    kind: PropTypes.oneOf(['intro', 'recap', 'outro']).isRequired,
     onDismiss: PropTypes.func,
-    onSkipIntroRequested: PropTypes.func,
+    onSkipRequested: PropTypes.func,
 };
 
 module.exports = SkipIntroPopup;
