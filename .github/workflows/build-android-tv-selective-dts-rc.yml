@@ -1,0 +1,118 @@
+name: Build selective Android TV DTS side by side RC
+
+on:
+  push:
+    branches:
+      - android/tv-selective-dts-rc
+    paths:
+      - android-dts/selective-side-by-side/**
+      - .github/workflows/build-android-tv-selective-dts-rc.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          repository: anilbeesetti/nextlib
+          ref: 6ff6cf9d0820382b3c233d018c52e4163b09d345
+          path: nextlib
+          persist-credentials: false
+
+      - name: Compile selective controller against Media3 1.10 NextLib
+        shell: bash
+        run: |
+          set -euo pipefail
+          dst=nextlib/media3ext/src/main/java/com/stremio/common/players
+          mkdir -p "$dst"
+          cp android-dts/selective-side-by-side/SelectiveDtsAudioController.java "$dst/"
+          cd nextlib
+          ./gradlew :media3ext:compileReleaseJavaWithJavac -x ffmpegSetup --stacktrace
+          class_file="$(find media3ext/build -type f -path '*/com/stremio/common/players/SelectiveDtsAudioController.class' -print -quit)"
+          test -n "$class_file"
+          echo "CLASS_FILE=$PWD/$class_file" >> "$GITHUB_ENV"
+
+      - name: Dex only the new controller class
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          platform="$(find "$ANDROID_HOME/platforms" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          mkdir -p /tmp/controller-dex
+          "$build_tools/d8" --min-api 23 --lib "$platform/android.jar" --output /tmp/controller-dex "$CLASS_FILE"
+          test -s /tmp/controller-dex/classes.dex
+          cp /tmp/controller-dex/classes.dex /tmp/classes10.dex
+
+      - name: Download and decode exact official Android TV APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/stremio.apk https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          echo 'dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423  /tmp/apktool.jar' | sha256sum -c -
+          java -jar /tmp/apktool.jar d -f -o /tmp/decoded /tmp/stremio.apk
+
+      - name: Apply selective side by side patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python android-dts/selective-side-by-side/patch_selective_side_by_side.py /tmp/decoded
+
+      - name: Rebuild and inject controller dex
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -jar /tmp/apktool.jar b /tmp/decoded -o /tmp/rebuilt.apk
+          cp /tmp/rebuilt.apk /tmp/unsigned.apk
+          (cd /tmp && zip -q -u unsigned.apk classes10.dex)
+          unzip -l /tmp/unsigned.apk | grep -F 'classes10.dex'
+
+      - name: Sign and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          keytool -genkeypair -noprompt -keystore /tmp/dtsrc.jks -storepass changeit -keypass changeit -alias dtsrc -keyalg RSA -keysize 3072 -validity 3650 -dname "CN=Stremio DTS Selective RC,O=Local Test,C=GB"
+          "$build_tools/zipalign" -f -p 4 /tmp/unsigned.apk /tmp/aligned.apk
+          "$build_tools/apksigner" sign --ks /tmp/dtsrc.jks --ks-pass pass:changeit --key-pass pass:changeit --out /tmp/Stremio-DTS-Selective-RC-arm.apk /tmp/aligned.apk
+          "$build_tools/apksigner" verify --verbose --print-certs /tmp/Stremio-DTS-Selective-RC-arm.apk
+          "$build_tools/aapt" dump badging /tmp/Stremio-DTS-Selective-RC-arm.apk | grep -F "package: name='com.stremio.dtsrc'"
+          unzip -l /tmp/Stremio-DTS-Selective-RC-arm.apk | grep -F 'classes10.dex'
+
+      - name: Package release candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp /tmp/Stremio-DTS-Selective-RC-arm.apk dist/
+          sha256sum dist/Stremio-DTS-Selective-RC-arm.apk > dist/SHA256SUMS.txt
+          cat > dist/README.txt <<'EOF'
+          Stremio DTS Selective RC
+
+          Side-by-side engineering candidate based on the official Android TV 1.10.4 ARM APK.
+          Package: com.stremio.dtsrc
+
+          Behaviour:
+          - normal AAC/AC3/E-AC3 and other non-DTS audio keeps the shipped automatic renderer order;
+          - when a selected DTS-family track becomes active, non-FFmpeg audio renderers are disabled and bundled FFmpeg audio is selected;
+          - tunnelling is disabled only while DTS fallback is forced and restored afterwards;
+          - video renderers are never modified.
+
+          This is not an official Stremio release and is signed with an ephemeral test key.
+          It cannot replace or update the official com.stremio.one package.
+          EOF
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stremio-dts-selective-rc-arm
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
