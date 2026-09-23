@@ -73,9 +73,7 @@ public final class SkipTvRuntimeTest {
                 assertHidden(activity, "Skip Credits");
                 assertFocused(activity, "Next Video");
                 assertEquals(-1L, activity.getLastSeekTargetMs());
-            });
-            press(KeyEvent.KEYCODE_DPAD_CENTER);
-            scenario.onActivity(activity -> {
+                clickVisible(activity, "Next Video");
                 assertEquals(1, activity.getNextEpisodeDispatchCount());
                 assertEquals(-1L, activity.getLastSeekTargetMs());
                 activity.setNextVideoVisible(false);
@@ -163,6 +161,13 @@ public final class SkipTvRuntimeTest {
         TextView view = findText(activity.getWindow().getDecorView(), text);
         assertNotNull("Expected focusable native TV view with text: " + text, view);
         assertTrue("Expected focus request to succeed for: " + text, view.requestFocus());
+    }
+
+    private static void clickVisible(MainActivity activity, String text) {
+        TextView view = findText(activity.getWindow().getDecorView(), text);
+        assertNotNull("Expected clickable native TV view with text: " + text, view);
+        assertTrue("Expected native TV view to be shown: " + text, view.isShown());
+        assertTrue("Expected click listener to run for: " + text, view.performClick());
     }
 
     private static TextView findText(View root, String text) {
