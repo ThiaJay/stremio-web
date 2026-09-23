@@ -201,12 +201,9 @@ jobs:
           tmp=f'v{locals_count+1}'
           method=method[:m.start()]+re.sub(r'\.locals\s+\d+',f'.locals {locals_count+2}',m.group(0),count=1)+method[m.end():]
 
-          fm=re.search(r'new-instance\s+(v\d+),\s+Lcom/stremio/common/players/CustomRenderersFactory;',method)
-          if not fm:
-              raise SystemExit('CustomRenderersFactory allocation missing')
-          factory=fm.group(1)
+          factory=factory_match.group(1)
           ctor=re.search(
-              rf'invoke-direct\s+\{{{re.escape(factory)},\s*p1\}},\s+Lcom/stremio/common/players/CustomRenderersFactory;-><init>\(Landroid/content/Context;\)V',
+              rf'invoke-direct\s+\{{{re.escape(factory)},\s*p1\}},\s+{re.escape(factory_descriptor)}-><init>\(Landroid/content/Context;\)V',
               method,
           )
           if not ctor:
