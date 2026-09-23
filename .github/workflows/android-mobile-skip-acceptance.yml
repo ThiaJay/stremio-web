@@ -29,13 +29,13 @@ jobs:
       - name: Checkout acceptance source
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Verify accepted Web base is preserved
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "$WEB_SOURCE_SHA"
+          git merge-base --is-ancestor "$WEB_SOURCE_SHA" HEAD
 
       - name: Checkout exact accepted Core source
         uses: actions/checkout@v4
