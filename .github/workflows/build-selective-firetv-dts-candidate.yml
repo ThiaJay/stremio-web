@@ -63,6 +63,7 @@ jobs:
           import androidx.media3.exoplayer.ExoPlayer
           import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
           import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
+          import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.RuntimeNextRenderersFactory
 
           @UnstableApi
           class DtsSelectiveRecoveryBridge private constructor(
@@ -82,12 +83,24 @@ jobs:
               }
 
               companion object {
+                  private val pendingDecoderManager = ThreadLocal<DecoderManager>()
+
+                  @JvmStatic
+                  fun prepare(factory: RuntimeNextRenderersFactory) {
+                      val manager = DecoderManager()
+                      factory.setDecoderManager(manager)
+                      pendingDecoderManager.set(manager)
+                  }
+
                   @JvmStatic
                   fun attach(
                       player: ExoPlayer,
-                      decoderManager: DecoderManager,
                       audioPassthroughEnabled: Boolean,
                   ) {
+                      val decoderManager = checkNotNull(pendingDecoderManager.get()) {
+                          "DTS selective DecoderManager was not prepared"
+                      }
+                      pendingDecoderManager.remove()
                       decoderManager.attach(player)
                       val selector = player.trackSelector as DefaultTrackSelector
                       val bridge = DtsSelectiveRecoveryBridge(
@@ -196,10 +209,8 @@ jobs:
           m=re.search(r'^\s*\.locals\s+(\d+)\s*$',method,re.M)
           if not m:
               raise SystemExit('createPlayer .locals missing')
-          locals_count=int(m.group(1))
-          mgr=f'v{locals_count}'
-          tmp=f'v{locals_count+1}'
-          method=method[:m.start()]+re.sub(r'\.locals\s+\d+',f'.locals {locals_count+2}',m.group(0),count=1)+method[m.end():]
+          if int(m.group(1)) != 10:
+              raise SystemExit(f'unexpected createPlayer locals: {m.group(1)}')
 
           factory=factory_match.group(1)
           ctor=re.search(
@@ -208,7 +219,7 @@ jobs:
           )
           if not ctor:
               raise SystemExit('CustomRenderersFactory constructor anchor missing')
-          inject_factory=f'''\n    sget-object {tmp}, Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderMode;->AUTO:Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderMode;\n    new-instance {mgr}, Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager;\n    invoke-direct {{{mgr}, {tmp}, {tmp}}}, Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager;-><init>(Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderMode;Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderMode;)V\n    invoke-virtual {{{factory}, {mgr}}}, Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory;->setDecoderManager(Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager;)Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory;\n'''
+          inject_factory=f'''\n    invoke-static {{{factory}}}, Lcom/stremio/common/players/DtsSelectiveRecoveryBridge;->prepare(Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory;)V\n'''
           method=method[:ctor.end()]+inject_factory+method[ctor.end():]
 
           returns=list(re.finditer(r'^\s*return-object\s+(v\d+)\s*$',method,re.M))
@@ -216,7 +227,7 @@ jobs:
               raise SystemExit(f'expected one createPlayer return, found {len(returns)}')
           ret=returns[0]
           player=ret.group(1)
-          inject_return=f'''    invoke-virtual {{p3}}, Lcom/stremio/core/types/profile/Profile$Settings;->getAudioPassthrough()Z\n    move-result {tmp}\n    invoke-static {{{player}, {mgr}, {tmp}}}, Lcom/stremio/common/players/DtsSelectiveRecoveryBridge;->attach(Landroidx/media3/exoplayer/ExoPlayer;Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager;Z)V\n\n'''
+          inject_return=f'''    invoke-virtual {{p3}}, Lcom/stremio/core/types/profile/Profile$Settings;->getAudioPassthrough()Z\n    move-result v1\n    invoke-static {{{player}, v1}}, Lcom/stremio/common/players/DtsSelectiveRecoveryBridge;->attach(Landroidx/media3/exoplayer/ExoPlayer;Z)V\n\n'''
           method=method[:ret.start()]+inject_return+method[ret.start():]
           src=src[:start]+method+src[end:]
           p.write_text(src)
