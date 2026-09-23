@@ -27,6 +27,7 @@ jobs:
       LINUX_SHELL_COMMIT: fa63b2c5258759fcc1ac9bae9ce23d2e801ae441
       SERVER_PATH: /tmp/stremio-linux-shell/data/server.js
       LC_NUMERIC: C
+      WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
     steps:
       - name: Bootstrap container
         run: |
