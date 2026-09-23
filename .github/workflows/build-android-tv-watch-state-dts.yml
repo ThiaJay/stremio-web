@@ -2,7 +2,7 @@ name: Build Android TV watched state and DTS test APKs
 
 on:
   push:
-    branches: [fix/android-tv-watch-state-dts-20260923]
+    branches: [android/tv-side-by-side-dts]
     paths:
       - .github/workflows/build-android-tv-watch-state-dts.yml
   workflow_dispatch:
