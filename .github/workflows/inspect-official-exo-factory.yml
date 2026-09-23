@@ -1,0 +1,41 @@
+name: Inspect official Exo createPlayer factory
+
+on:
+  push:
+    branches:
+      - android/tv-selective-dts-side-by-side
+    paths:
+      - .github/workflows/inspect-official-exo-factory.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Decode exact official APK and print createPlayer
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/stremio.apk https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          java -jar /tmp/apktool.jar d -f --no-res -o /tmp/decoded /tmp/stremio.apk >/dev/null
+          target="$(find /tmp/decoded -type f -path '*/com/stremio/common/players/ExoPlayer$Companion.smali' -print -quit)"
+          python - "$target" <<'PY'
+          import sys
+          p=sys.argv[1]
+          lines=open(p,encoding='utf-8').read().splitlines()
+          for i,line in enumerate(lines):
+              if line.startswith('.method private final createPlayer('):
+                  for j in range(i,len(lines)):
+                      print(f'{j+1}: {lines[j]}')
+                      if lines[j].strip()=='.end method':
+                          raise SystemExit
+          raise SystemExit('createPlayer not found')
+          PY
+          echo '--- RenderersFactory references ---'
+          grep -RIn --include='*.smali' 'RenderersFactory' /tmp/decoded/smali* | head -100
