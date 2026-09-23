@@ -2,7 +2,7 @@ name: Android DTS recovery public validation
 
 on:
   push:
-    branches: [android/dts-audio-recovery]
+    branches: [development, android/dts-audio-recovery, 'feat/android-dts-*', 'fix/android-dts-*', 'chore/android-dts-*']
     paths:
       - android-dts/**
       - .github/workflows/android-dts-public.yml
