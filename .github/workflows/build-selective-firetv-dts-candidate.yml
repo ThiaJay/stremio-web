@@ -166,17 +166,6 @@ jobs:
               text=text.replace(old,new)
           manifest.write_text(text)
 
-          custom=list(root.glob('smali*/com/stremio/common/players/CustomRenderersFactory.smali'))
-          if len(custom)!=1:
-              raise SystemExit(f'expected one CustomRenderersFactory, found {len(custom)}')
-          cp=custom[0]
-          c=cp.read_text()
-          old='Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory;'
-          new='Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory;'
-          if c.count(old)<2:
-              raise SystemExit('CustomRenderersFactory superclass anchors changed')
-          cp.write_text(c.replace(old,new))
-
           companions=list(root.glob('smali*/com/stremio/common/players/ExoPlayer$Companion.smali'))
           if len(companions)!=1:
               raise SystemExit(f'expected one ExoPlayer Companion, found {len(companions)}')
@@ -188,6 +177,22 @@ jobs:
               raise SystemExit('createPlayer method missing')
           end=src.find('.end method',start)
           method=src[start:end]
+
+          factory_match=re.search(r'new-instance\\s+(v\\d+),\\s+(L[^;]*CustomRenderersFactory;)', method)
+          if not factory_match:
+              raise SystemExit('CustomRenderersFactory allocation/descriptor missing from createPlayer')
+          factory_descriptor=factory_match.group(2)
+          factory_rel=factory_descriptor[1:-1]+'.smali'
+          custom=list(root.glob('smali*/'+factory_rel))
+          if len(custom)!=1:
+              raise SystemExit(f'expected one {factory_descriptor}, found {len(custom)} at {factory_rel}')
+          cp=custom[0]
+          factory_code=cp.read_text()
+          old='Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory;'
+          new='Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory;'
+          if factory_code.count(old)<2:
+              raise SystemExit(f'factory superclass anchors changed in {cp}')
+          cp.write_text(factory_code.replace(old,new))
           m=re.search(r'^\s*\.locals\s+(\d+)\s*$',method,re.M)
           if not m:
               raise SystemExit('createPlayer .locals missing')
