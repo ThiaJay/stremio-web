@@ -65,9 +65,15 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Install Android SDK platform
         shell: bash
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Compile native Android acceptance app and tests
         shell: bash
