@@ -1,0 +1,122 @@
+name: Android TV skip runtime acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/android-tv-skip-runtime-20260923
+    paths:
+      - "acceptance/android-tv-skip/**"
+      - ".github/workflows/android-tv-skip-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-tv-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CORE_SOURCE_SHA: e12b41173b0aca767794fb6854f535817ad07654
+      WEB_SOURCE_SHA: 26f2a5987618c62199593dec9a7ca18f0b2ac9f2
+    steps:
+      - name: Checkout acceptance source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify accepted Web base is preserved
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$WEB_SOURCE_SHA" HEAD
+
+      - name: Checkout exact accepted Core source
+        uses: actions/checkout@v4
+        with:
+          repository: ThiaJay/stremio-core
+          ref: ${{ env.CORE_SOURCE_SHA }}
+          path: exact-core
+
+      - name: Verify exact Core source and TV interaction contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C exact-core rev-parse HEAD)" = "$CORE_SOURCE_SHA"
+          grep -F "A resolved skip segment always means a seek within the currently selected media." exact-core/SKIP_SEGMENTS.md
+          grep -F "Next-video UI keeps priority near episode end." exact-core/SKIP_SEGMENTS.md
+          grep -F "Android TV" exact-core/SKIP_SEGMENTS.md
+          grep -F "no unintended watched-state or next-episode transition." exact-core/SKIP_SEGMENTS.md
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Install Android SDK platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Compile native Android TV acceptance app and tests
+        shell: bash
+        run: gradle --no-daemon -p acceptance/android-tv-skip :app:assembleDebug :app:assembleDebugAndroidTest
+
+      - name: Enable KVM for Android TV emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run genuine Android TV emulator runtime acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: gradle --no-daemon -p acceptance/android-tv-skip :app:connectedDebugAndroidTest
+
+      - name: Write source bound receipt
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          receipt = {
+              "validation_head": os.environ.get("GITHUB_SHA"),
+              "web_source_sha": os.environ["WEB_SOURCE_SHA"],
+              "core_source_sha": os.environ["CORE_SOURCE_SHA"],
+              "runtime": "Android TV emulator API 34 x86 tv_1080p profile",
+              "scope": "representative native Android TV skip presentation and D-pad runtime",
+              "expected_instrumentation_cases": 7,
+              "private_stremio_android_tv_adoption_claimed": False,
+              "real_tv_adb_acceptance_claimed": False,
+              "physical_av_acceptance_claimed": False,
+          }
+          Path("acceptance/android-tv-skip/acceptance-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-tv-skip-runtime-evidence
+          if-no-files-found: error
+          path: |
+            acceptance/android-tv-skip/acceptance-receipt.json
+            acceptance/android-tv-skip/app/build/reports/androidTests/connected/**
+            acceptance/android-tv-skip/app/build/outputs/androidTest-results/connected/**
