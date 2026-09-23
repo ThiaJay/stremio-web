@@ -1,0 +1,58 @@
+name: Inspect Android TV selective DTS integration points
+
+on:
+  push:
+    branches:
+      - android/tv-selective-dts-rc
+    paths:
+      - .github/workflows/inspect-android-tv-selective-dts.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Decode exact official Android TV APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/stremio.apk https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -o /tmp/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          java -jar /tmp/apktool.jar d -f --no-res -o /tmp/decoded /tmp/stremio.apk >/dev/null
+
+      - name: Print player factory and listener methods
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          root=Path('/tmp/decoded')
+          targets=[
+              next(root.glob('smali*/com/stremio/common/players/ExoPlayer$Companion.smali')),
+              next(root.glob('smali*/com/stremio/common/players/ExoPlayer$eventListener$1.smali')),
+              next(root.glob('smali*/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory.smali')),
+          ]
+          wanted={
+              'ExoPlayer$Companion.smali':['createPlayer'],
+              'ExoPlayer$eventListener$1.smali':['onTracksChanged','onPlayerError'],
+              'NextRenderersFactory.smali':['buildAudioRenderers','buildVideoRenderers'],
+          }
+          for p in targets:
+              print(f'===== {p} =====')
+              lines=p.read_text().splitlines()
+              names=wanted[p.name]
+              for i,line in enumerate(lines):
+                  if line.startswith('.method') and any(n+'(' in line for n in names):
+                      j=i+1
+                      while j < len(lines) and lines[j].strip() != '.end method':
+                          j += 1
+                      if j < len(lines): j += 1
+                      print('\n'.join(f'{k+1}: {lines[k]}' for k in range(i,j)))
+          PY
