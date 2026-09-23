@@ -178,7 +178,7 @@ jobs:
           end=src.find('.end method',start)
           method=src[start:end]
 
-          factory_match=re.search(r'new-instance\\s+(v\\d+),\\s+(L[^;]*CustomRenderersFactory;)', method)
+          factory_match=re.search(r'new-instance\s+(v\d+),\s+(L[^;]*CustomRenderersFactory;)', method)
           if not factory_match:
               raise SystemExit('CustomRenderersFactory allocation/descriptor missing from createPlayer')
           factory_descriptor=factory_match.group(2)
