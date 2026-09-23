@@ -23,8 +23,10 @@ jobs:
     timeout-minutes: 45
     env:
       DEBIAN_FRONTEND: noninteractive
-      PRODUCT_COMMIT: 0ae947555fbb9da757d640e4179073063636a26e
+      PRODUCT_COMMIT: 26f2a5987618c62199593dec9a7ca18f0b2ac9f2
       LINUX_SHELL_COMMIT: fa63b2c5258759fcc1ac9bae9ce23d2e801ae441
+      SERVER_PATH: /tmp/stremio-linux-shell/data/server.js
+      LC_NUMERIC: C
     steps:
       - name: Bootstrap container
         run: |
@@ -78,6 +80,7 @@ jobs:
           cd /tmp/stremio-linux-shell
           git checkout --detach "$LINUX_SHELL_COMMIT"
           test "$(git rev-parse HEAD)" = "$LINUX_SHELL_COMMIT"
+          test -f data/server.js
           "$HOME/.cargo/bin/cargo" build --release
           test -x target/release/stremio-linux-shell
 
@@ -103,6 +106,7 @@ jobs:
           mkdir -p native-desktop-receipt
           export ACCEPTANCE_ROOT=/tmp/web-product/build
           export ACCEPTANCE_RECEIPT="$PWD/native-desktop-receipt/fixture-receipt.json"
+          test -f "$SERVER_PATH"
           python3 .github/native-desktop-acceptance/server.py > native-desktop-receipt/web-server.log 2>&1 &
           SERVER_PID=$!
           echo "$SERVER_PID" > native-desktop-receipt/web-server.pid
