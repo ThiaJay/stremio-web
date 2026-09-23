@@ -1,0 +1,268 @@
+name: Build selective Fire TV DTS side-by-side candidate
+
+on:
+  push:
+    branches:
+      - android/tv-selective-dts-side-by-side
+    paths:
+      - .github/workflows/build-selective-firetv-dts-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          repository: anilbeesetti/nextlib
+          ref: 6ff6cf9d0820382b3c233d018c52e4163b09d345
+          path: nextlib
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          repository: anilbeesetti/nextlib
+          ref: 2dc77cd2d9352bc308aa26782f9c77a320df510b
+          path: nextlib-new
+          persist-credentials: false
+
+      - name: Build runtime switching overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder
+          for file in DecoderMode.kt DecoderRendererController.kt DecoderManager.kt; do
+            cp "nextlib-new/$base/$file" "nextlib/$base/$file"
+          done
+
+          python - <<'PY'
+          from pathlib import Path
+          src=Path('nextlib-new/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory.kt').read_text()
+          src=src.replace('open class NextRenderersFactory(context: Context)', 'open class RuntimeNextRenderersFactory(context: Context)')
+          src=src.replace('fun setDecoderManager(decoderManager: DecoderManager): NextRenderersFactory', 'fun setDecoderManager(decoderManager: DecoderManager): RuntimeNextRenderersFactory')
+          Path('nextlib/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory.kt').write_text(src)
+          PY
+
+          main=nextlib/media3ext/src/main/java/com/stremio/common/players
+          mkdir -p "$main"
+          cp android-dts/src/DtsAudioRecoveryPolicy.kt "$main/"
+          cp android-dts/src/DtsAudioRecoveryController.kt "$main/"
+          cat > "$main/DtsSelectiveRecoveryBridge.kt" <<'KOTLIN'
+          package com.stremio.common.players
+
+          import androidx.media3.common.PlaybackException
+          import androidx.media3.common.Player
+          import androidx.media3.common.Tracks
+          import androidx.media3.common.util.UnstableApi
+          import androidx.media3.exoplayer.ExoPlayer
+          import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+          import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
+
+          @UnstableApi
+          class DtsSelectiveRecoveryBridge private constructor(
+              private val controller: DtsAudioRecoveryController,
+              private val audioPassthroughEnabled: Boolean,
+          ) : Player.Listener {
+              override fun onTracksChanged(tracks: Tracks) {
+                  controller.onTracksChanged(
+                      tracks,
+                      audioPassthroughEnabled = audioPassthroughEnabled,
+                      dtsPassthroughKnownGood = false,
+                  )
+              }
+
+              override fun onPlayerError(error: PlaybackException) {
+                  controller.onPlayerError(error)
+              }
+
+              companion object {
+                  @JvmStatic
+                  fun attach(
+                      player: ExoPlayer,
+                      decoderManager: DecoderManager,
+                      audioPassthroughEnabled: Boolean,
+                  ) {
+                      decoderManager.attach(player)
+                      val selector = player.trackSelector as DefaultTrackSelector
+                      val bridge = DtsSelectiveRecoveryBridge(
+                          DtsAudioRecoveryController(decoderManager, selector),
+                          audioPassthroughEnabled,
+                      )
+                      player.addListener(bridge)
+                      bridge.onTracksChanged(player.currentTracks)
+                  }
+              }
+          }
+          KOTLIN
+
+          cd nextlib
+          ./gradlew :media3ext:compileDebugKotlin -x ffmpegSetup --stacktrace
+          classes=media3ext/build/tmp/kotlin-classes/debug
+          cd "$classes"
+          files="$(find io/github/anilbeesetti/nextlib/media3ext/ffdecoder com/stremio/common/players -type f \( \
+            -name 'DecoderManager*.class' -o \
+            -name 'DecoderMode*.class' -o \
+            -name 'DecoderRendererController*.class' -o \
+            -name 'DecoderMediaCodecSelector*.class' -o \
+            -name 'ModeAwareRenderer*.class' -o \
+            -name 'RuntimeNextRenderersFactory*.class' -o \
+            -name 'DtsAudioRecovery*.class' -o \
+            -name 'DtsSelectiveRecoveryBridge*.class' \
+          \) -print)"
+          test -n "$files"
+          jar cf /tmp/dts-selective-overlay.jar $files
+          jar tf /tmp/dts-selective-overlay.jar | sort
+
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          platform_jar="$(find "$ANDROID_HOME/platforms" -mindepth 2 -maxdepth 2 -name android.jar | sort -V | tail -1)"
+          mkdir -p /tmp/overlay-dex
+          "$build_tools/d8" --min-api 23 --lib "$platform_jar" --output /tmp/overlay-dex /tmp/dts-selective-overlay.jar
+          test -s /tmp/overlay-dex/classes.dex
+
+      - name: Download and decode official Android TV 1.10.4 ARM APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            -o /tmp/stremio.apk \
+            https://dl.strem.io/android/v1.10.4-androidTV/com.stremio.one-1.10.4-31048580-armeabi-v7a.apk
+          echo 'e18a5405bb53e12a903ff477457318b8f8d3c8e1995e0a4c3ff5d8893d1ccf0b  /tmp/stremio.apk' | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            -o /tmp/apktool.jar \
+            https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+          echo 'dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423  /tmp/apktool.jar' | sha256sum -c -
+          java -jar /tmp/apktool.jar d -f -o /tmp/decoded /tmp/stremio.apk
+
+      - name: Apply side-by-side identity and selective runtime wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root=Path('/tmp/decoded')
+          manifest=root/'AndroidManifest.xml'
+          text=manifest.read_text()
+          replacements={
+              'package="com.stremio.one"':'package="com.stremio.dtsselective"',
+              'com.stremio.one.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION':'com.stremio.dtsselective.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
+              'android:label="@string/app_name"':'android:label="Stremio DTS Selective"',
+              'android:authorities="com.stremio.one.content"':'android:authorities="com.stremio.dtsselective.content"',
+              'android:authorities="com.stremio.one.firebaseinitprovider"':'android:authorities="com.stremio.dtsselective.firebaseinitprovider"',
+              'android:authorities="com.stremio.one.androidx-startup"':'android:authorities="com.stremio.dtsselective.androidx-startup"',
+          }
+          for old,new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'manifest anchor missing: {old}')
+              text=text.replace(old,new)
+          manifest.write_text(text)
+
+          custom=list(root.glob('smali*/com/stremio/common/players/CustomRenderersFactory.smali'))
+          if len(custom)!=1:
+              raise SystemExit(f'expected one CustomRenderersFactory, found {len(custom)}')
+          cp=custom[0]
+          c=cp.read_text()
+          old='Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/NextRenderersFactory;'
+          new='Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory;'
+          if c.count(old)<2:
+              raise SystemExit('CustomRenderersFactory superclass anchors changed')
+          cp.write_text(c.replace(old,new))
+
+          companions=list(root.glob('smali*/com/stremio/common/players/ExoPlayer$Companion.smali'))
+          if len(companions)!=1:
+              raise SystemExit(f'expected one ExoPlayer Companion, found {len(companions)}')
+          p=companions[0]
+          src=p.read_text()
+          marker='.method private final createPlayer('
+          start=src.find(marker)
+          if start<0:
+              raise SystemExit('createPlayer method missing')
+          end=src.find('.end method',start)
+          method=src[start:end]
+          m=re.search(r'^\s*\.locals\s+(\d+)\s*$',method,re.M)
+          if not m:
+              raise SystemExit('createPlayer .locals missing')
+          locals_count=int(m.group(1))
+          mgr=f'v{locals_count}'
+          tmp=f'v{locals_count+1}'
+          method=method[:m.start()]+re.sub(r'\.locals\s+\d+',f'.locals {locals_count+2}',m.group(0),count=1)+method[m.end():]
+
+          fm=re.search(r'new-instance\s+(v\d+),\s+Lcom/stremio/common/players/CustomRenderersFactory;',method)
+          if not fm:
+              raise SystemExit('CustomRenderersFactory allocation missing')
+          factory=fm.group(1)
+          ctor=re.search(
+              rf'invoke-direct\s+\{{{re.escape(factory)},\s*p1\}},\s+Lcom/stremio/common/players/CustomRenderersFactory;-><init>\(Landroid/content/Context;\)V',
+              method,
+          )
+          if not ctor:
+              raise SystemExit('CustomRenderersFactory constructor anchor missing')
+          inject_factory=f'''\n    sget-object {tmp}, Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderMode;->AUTO:Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderMode;\n    new-instance {mgr}, Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager;\n    invoke-direct {{{mgr}, {tmp}, {tmp}}}, Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager;-><init>(Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderMode;Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderMode;)V\n    invoke-virtual {{{factory}, {mgr}}}, Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory;->setDecoderManager(Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager;)Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/RuntimeNextRenderersFactory;\n'''
+          method=method[:ctor.end()]+inject_factory+method[ctor.end():]
+
+          returns=list(re.finditer(r'^\s*return-object\s+(v\d+)\s*$',method,re.M))
+          if len(returns)!=1:
+              raise SystemExit(f'expected one createPlayer return, found {len(returns)}')
+          ret=returns[0]
+          player=ret.group(1)
+          inject_return=f'''    invoke-virtual {{p3}}, Lcom/stremio/core/types/profile/Profile$Settings;->getAudioPassthrough()Z\n    move-result {tmp}\n    invoke-static {{{player}, {mgr}, {tmp}}}, Lcom/stremio/common/players/DtsSelectiveRecoveryBridge;->attach(Landroidx/media3/exoplayer/ExoPlayer;Lio/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager;Z)V\n\n'''
+          method=method[:ret.start()]+inject_return+method[ret.start():]
+          src=src[:start]+method+src[end:]
+          p.write_text(src)
+          print('patched',cp)
+          print('patched',p)
+          PY
+
+      - name: Rebuild APK and inject runtime overlay dex
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -jar /tmp/apktool.jar b /tmp/decoded -o /tmp/base-unsigned.apk
+          cp /tmp/overlay-dex/classes.dex /tmp/classes10.dex
+          cp /tmp/base-unsigned.apk /tmp/with-overlay.apk
+          zip -q -j /tmp/with-overlay.apk /tmp/classes10.dex
+          unzip -l /tmp/with-overlay.apk | grep -F classes10.dex
+
+      - name: Sign and verify side-by-side candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          keytool -genkeypair -noprompt -keystore /tmp/dtsselective.jks -storepass changeit -keypass changeit -alias dtsselective -keyalg RSA -keysize 3072 -validity 3650 -dname 'CN=Stremio DTS Selective Test,O=Local Test,C=GB'
+          "$build_tools/zipalign" -f -p 4 /tmp/with-overlay.apk /tmp/aligned.apk
+          "$build_tools/apksigner" sign --ks /tmp/dtsselective.jks --ks-pass pass:changeit --key-pass pass:changeit --out /tmp/Stremio-DTS-Selective-1.10.4-arm.apk /tmp/aligned.apk
+          "$build_tools/apksigner" verify --verbose --print-certs /tmp/Stremio-DTS-Selective-1.10.4-arm.apk
+          "$build_tools/aapt" dump badging /tmp/Stremio-DTS-Selective-1.10.4-arm.apk | grep -F "package: name='com.stremio.dtsselective'"
+          sha256sum /tmp/Stremio-DTS-Selective-1.10.4-arm.apk
+
+      - name: Package candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp /tmp/Stremio-DTS-Selective-1.10.4-arm.apk dist/
+          cat > dist/README.txt <<'TXT'
+          Stremio DTS Selective side-by-side candidate.
+
+          Package: com.stremio.dtsselective
+          Base: official Android TV 1.10.4 ARM APK.
+          Purpose: retain Exo/MediaCodec video and switch only DTS-family audio to the bundled FFmpeg renderer when the route is not known good.
+          Normal non-DTS audio remains on automatic decoder selection.
+
+          This is a test-signed side-by-side candidate, not an official Stremio release. It does not replace com.stremio.one.
+          TXT
+          sha256sum dist/Stremio-DTS-Selective-1.10.4-arm.apk > dist/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stremio-dts-selective-arm
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
