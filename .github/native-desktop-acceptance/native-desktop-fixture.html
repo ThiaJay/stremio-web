@@ -30,7 +30,7 @@
   }
 
   function event(name, data) {
-    send({ type: 6, args: ['onEvent', [name, data]] });
+    send({ type: 6, args: [name, data] });
   }
 
   function maybePass() {
