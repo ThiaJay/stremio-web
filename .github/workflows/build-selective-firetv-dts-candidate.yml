@@ -103,7 +103,9 @@ jobs:
 
           cd nextlib
           ./gradlew :media3ext:compileDebugKotlin -x ffmpegSetup --stacktrace
-          classes=media3ext/build/tmp/kotlin-classes/debug
+          dm="$(find media3ext/build -type f -path '*/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager.class' -print -quit)"
+          test -n "$dm"
+          classes="${dm%/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/DecoderManager.class}"
           cd "$classes"
           files="$(find io/github/anilbeesetti/nextlib/media3ext/ffdecoder com/stremio/common/players -type f \( \
             -name 'DecoderManager*.class' -o \
