@@ -21,8 +21,8 @@ importers:
         specifier: 5.2.0
         version: 5.2.0
       '@stremio/stremio-core-web':
-        specifier: https://raw.githubusercontent.com/ThiaJay/stremio-core/a54ab1597a9824338535b250768f6257f5e95f01/stremio-core-web/development/stremio-stremio-core-web-0.63.2.tgz
-        version: https://raw.githubusercontent.com/ThiaJay/stremio-core/a54ab1597a9824338535b250768f6257f5e95f01/stremio-core-web/development/stremio-stremio-core-web-0.63.2.tgz
+        specifier: https://raw.githubusercontent.com/ThiaJay/stremio-core/598c89f/stremio-core-web/feat/story-mode-native-contract-20260924/stremio-stremio-core-web-0.63.2.tgz
+        version: https://raw.githubusercontent.com/ThiaJay/stremio-core/598c89f/stremio-core-web/feat/story-mode-native-contract-20260924/stremio-stremio-core-web-0.63.2.tgz
       '@stremio/stremio-icons':
         specifier: 5.15.0
         version: 5.15.0
@@ -1430,8 +1430,8 @@ packages:
   '@stremio/stremio-colors@5.2.0':
     resolution: {integrity: sha512-dYlPgu9W/H7c9s1zmW5tiDnRenaUa4Hg1QCyOg1lhOcgSfM/bVTi5nnqX+IfvGTTUNA0zgzh8hI3o3miwnZxTg==}
 
-  '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/a54ab1597a9824338535b250768f6257f5e95f01/stremio-core-web/development/stremio-stremio-core-web-0.63.2.tgz':
-    resolution: {integrity: sha512-rXMZoD82OCmWPnmOjQHDi1K1Tg4KO2kejIX9P2HIIxeV0cx0RlmgYWZ5FlNptVfeHu3gVt3sXlyvH3G50oVjAg==, tarball: https://raw.githubusercontent.com/ThiaJay/stremio-core/a54ab1597a9824338535b250768f6257f5e95f01/stremio-core-web/development/stremio-stremio-core-web-0.63.2.tgz}
+  '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/598c89f/stremio-core-web/feat/story-mode-native-contract-20260924/stremio-stremio-core-web-0.63.2.tgz':
+    resolution: {integrity: sha512-XRTmmzItQfvPbwHqzRnKo7fmc6Bh8vgU8RbdNij3MIykToAQvvT3TU6mt6tQV9u6zRV7u86KAb7HcpaIk88oyg==, tarball: https://raw.githubusercontent.com/ThiaJay/stremio-core/598c89f/stremio-core-web/feat/story-mode-native-contract-20260924/stremio-stremio-core-web-0.63.2.tgz}
     version: 0.63.2
 
   '@stremio/stremio-icons@5.15.0':
@@ -6523,7 +6523,7 @@ snapshots:
 
   '@stremio/stremio-colors@5.2.0': {}
 
-  '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/a54ab1597a9824338535b250768f6257f5e95f01/stremio-core-web/development/stremio-stremio-core-web-0.63.2.tgz':
+  '@stremio/stremio-core-web@https://raw.githubusercontent.com/ThiaJay/stremio-core/598c89f/stremio-core-web/feat/story-mode-native-contract-20260924/stremio-stremio-core-web-0.63.2.tgz':
     dependencies:
       '@babel/runtime': 7.24.1
 
