@@ -14,6 +14,7 @@ const VideosList = require('./VideosList');
 const { default: LiveTvDetails } = require('./LiveTvDetails');
 const { default: LiveTvPlaceholder } = require('./LiveTvDetails/Placeholder');
 const useMetaDetails = require('./useMetaDetails');
+const { readTitleWatchedAction, clearTitleWatchedAction } = require('./titleWatchedAction');
 const useSeason = require('./useSeason');
 const { default: useExternalPlayerCallback } = require('./useExternalPlayerCallback');
 const styles = require('./styles');
@@ -35,6 +36,42 @@ const MetaDetails = () => {
         videoId
     }), [type, id, videoId]);
     const metaDetails = useMetaDetails(urlParams);
+    const pendingTitleWatchedAction = React.useMemo(
+        () => readTitleWatchedAction(location.search),
+        [location.search]
+    );
+    const consumedTitleWatchedActionRef = React.useRef(null);
+    React.useEffect(() => {
+        if (
+            type !== 'series' ||
+            pendingTitleWatchedAction === null ||
+            metaDetails.metaItem?.content.type !== 'Ready' ||
+            metaDetails.libraryItem === null
+        ) {
+            return;
+        }
+
+        const key = `${id}:${pendingTitleWatchedAction}:${location.search}`;
+        if (consumedTitleWatchedActionRef.current === key) return;
+        consumedTitleWatchedActionRef.current = key;
+
+        core.transport.dispatch({
+            action: 'MetaDetails',
+            args: {
+                action: 'MarkAsWatched',
+                args: pendingTitleWatchedAction === 'watched'
+            }
+        });
+
+        navigate({
+            pathname: location.pathname,
+            search: clearTitleWatchedAction(location.search),
+            hash: location.hash
+        }, {
+            replace: true,
+            state: location.state
+        });
+    }, [core, id, location.hash, location.pathname, location.search, location.state, metaDetails.libraryItem, metaDetails.metaItem, navigate, pendingTitleWatchedAction, type]);
     const readyMeta = metaDetails.metaItem?.content.type === 'Ready' ? metaDetails.metaItem.content.content : null;
     const isLiveMeta = readyMeta !== null && (readyMeta.behaviorHints?.isLive === true || readyMeta.type === 'tv');
     useExternalPlayerCallback(urlParams, metaDetails);

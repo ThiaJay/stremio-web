@@ -8,6 +8,7 @@ const { useCore } = require('stremio/core');
 const { useProfile } = require('stremio/common');
 const { Image, SearchBar, Toggle, Video } = require('stremio/components');
 const SeasonsBar = require('./SeasonsBar');
+const stableStoryOrderVideos = require('./stableStoryOrderVideos');
 const { default: EpisodePicker } = require('../EpisodePicker');
 const styles = require('./styles');
 
@@ -23,6 +24,20 @@ const VideosList = ({ className, metaItem, libraryItem, season, seasonOnSelect, 
             :
             [];
     }, [metaItem]);
+    const storyOrderedVideos = React.useMemo(() => {
+        return metaItem?.content?.type === 'Ready'
+            ? stableStoryOrderVideos(videos, metaItem.content.content.behaviorHints)
+            : null;
+    }, [metaItem, videos]);
+    const [storyMode, setStoryMode] = React.useState(false);
+    React.useEffect(() => {
+        setStoryMode(Array.isArray(storyOrderedVideos) && storyOrderedVideos.length > 0);
+    }, [titleKey, storyOrderedVideos]);
+
+    const storyModeOnClick = React.useCallback(() => {
+        if (storyOrderedVideos) setStoryMode((value) => !value);
+    }, [storyOrderedVideos]);
+
     const seasons = React.useMemo(() => {
         return videos
             .map(({ season }) => season)
@@ -57,6 +72,9 @@ const VideosList = ({ className, metaItem, libraryItem, season, seasonOnSelect, 
         return null;
     }, [seasons, season, videos, libraryItem]);
     const videosForSeason = React.useMemo(() => {
+        if (storyMode && storyOrderedVideos) {
+            return storyOrderedVideos;
+        }
         return videos
             .filter((video) => {
                 return selectedSeason === null || video.season === selectedSeason;
@@ -64,7 +82,7 @@ const VideosList = ({ className, metaItem, libraryItem, season, seasonOnSelect, 
             .sort((a, b) => {
                 return a.episode - b.episode;
             });
-    }, [videos, selectedSeason]);
+    }, [videos, selectedSeason, storyMode, storyOrderedVideos]);
 
     const seasonWatched = React.useMemo(() => {
         return videosForSeason.every((video) => video.watched);
@@ -173,7 +191,15 @@ const VideosList = ({ className, metaItem, libraryItem, season, seasonOnSelect, 
                                     null
                             }
                             {
-                                seasons.length > 0 ?
+                                storyOrderedVideos ?
+                                    <Toggle className={styles['story-order-toggle']} checked={storyMode} onClick={storyModeOnClick}>
+                                        {t('STORY_ORDER_MODE', { defaultValue: 'Story order' })}
+                                    </Toggle>
+                                    :
+                                    null
+                            }
+                            {
+                                seasons.length > 0 && !storyMode ?
                                     <SeasonsBar
                                         className={styles['seasons-bar']}
                                         season={selectedSeason}
@@ -213,11 +239,11 @@ const VideosList = ({ className, metaItem, libraryItem, season, seasonOnSelect, 
                                                 progress={video.progress}
                                                 deepLinks={video.deepLinks}
                                                 scheduled={video.scheduled}
-                                                seasonWatched={seasonWatched}
+                                                seasonWatched={storyMode ? false : seasonWatched}
                                                 selected={video.id === selectedVideoId}
                                                 onSelect={saveScrollPosition}
                                                 onMarkVideoAsWatched={onMarkVideoAsWatched}
-                                                onMarkSeasonAsWatched={onMarkSeasonAsWatched}
+                                                onMarkSeasonAsWatched={storyMode ? undefined : onMarkSeasonAsWatched}
                                             />
                                         ))
                                 }
