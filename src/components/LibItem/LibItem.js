@@ -9,6 +9,7 @@ const { useCore } = require('stremio/core');
 const { default: getMetaDetailsHref } = require('stremio/common/getMetaDetailsHref');
 const MetaItem = require('stremio/components/MetaItem');
 const { t } = require('i18next');
+const { withTitleWatchedAction } = require('stremio/routes/MetaDetails/titleWatchedAction');
 
 const LibItem = ({ _id, removable, notifications, watched, detailsVideosFirst, ...props }) => {
     const navigate = useNavigate();
@@ -27,7 +28,13 @@ const LibItem = ({ _id, removable, notifications, watched, detailsVideosFirst, .
             { label: 'LIBRARY_PLAY', value: 'play' },
             { label: 'LIBRARY_DETAILS', value: 'details' },
             { label: 'LIBRARY_RESUME_DISMISS', value: 'dismiss' },
-            { label: watched ? 'CTX_MARK_UNWATCHED' : 'CTX_MARK_WATCHED', value: 'watched' },
+            props.type === 'series'
+                ? {
+                    label: watched ? 'CTX_MARK_ALL_RELEASED_UNWATCHED' : 'CTX_MARK_ALL_RELEASED_WATCHED',
+                    defaultValue: watched ? 'Mark all released as unwatched' : 'Mark all released as watched',
+                    value: 'watched'
+                }
+                : { label: watched ? 'CTX_MARK_UNWATCHED' : 'CTX_MARK_WATCHED', value: 'watched' },
             { label: 'LIBRARY_REMOVE', value: 'remove' },
         ].filter(({ value }) => {
             switch (value) {
@@ -44,9 +51,9 @@ const LibItem = ({ _id, removable, notifications, watched, detailsVideosFirst, .
             }
         }).map((option) => ({
             ...option,
-            label: t(option.label)
+            label: t(option.label, { defaultValue: option.defaultValue ?? option.label })
         }));
-    }, [_id, removable, props.progress, playerHref, detailsHref, watched]);
+    }, [_id, removable, props.progress, props.type, playerHref, detailsHref, watched]);
 
     const optionOnSelect = React.useCallback((event) => {
         if (typeof props.optionOnSelect === 'function') {
@@ -70,7 +77,9 @@ const LibItem = ({ _id, removable, notifications, watched, detailsVideosFirst, .
                     break;
                 }
                 case 'watched': {
-                    if (typeof _id === 'string') {
+                    if (typeof _id === 'string' && props.type === 'series' && typeof detailsHref === 'string') {
+                        navigateWithOrigin(withTitleWatchedAction(detailsHref, !watched));
+                    } else if (typeof _id === 'string') {
                         core.transport.dispatch({
                             action: 'Ctx',
                             args: {
@@ -120,7 +129,7 @@ const LibItem = ({ _id, removable, notifications, watched, detailsVideosFirst, .
                 }
             }
         }
-    }, [_id, detailsHref, navigate, navigateWithOrigin, playerHref, props.optionOnSelect, watched]);
+    }, [_id, detailsHref, navigate, navigateWithOrigin, playerHref, props.optionOnSelect, props.type, watched]);
 
     const onPlayClick = React.useCallback((event) => {
         event.preventDefault();
