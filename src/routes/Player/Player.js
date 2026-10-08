@@ -963,8 +963,7 @@ const Player = () => {
 
     const selectedStream = player.selected?.stream;
     const statisticsMenuAvailable = streamingServer?.statistics?.type !== 'Err'
-        && typeof selectedStream?.infoHash === 'string'
-        && typeof selectedStream?.fileIdx === 'number';
+        && typeof selectedStream?.infoHash === 'string';
 
     const finishDetailsHold = React.useCallback(() => {
         const hold = detailsHold.current;
