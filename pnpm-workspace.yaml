@@ -5,3 +5,7 @@ blockExoticSubdeps: false
 
 patchedDependencies:
   '@stremio/stremio-video@0.0.98': patches/stremio_video_0_0_98.patch
+
+overrides:
+  qs: 6.16.0
+  '@babel/runtime': 7.29.2
