@@ -1,12 +1,14 @@
-name: Isolated Core 0.65 Web candidate validation
+name: Isolated Core 0.65 and Router 7 validation
 
 on:
   push:
     branches:
       - integration/upstream-20261010-core065-candidate
+      - integration/upstream-20261010-core065-router7-candidate
   pull_request:
     branches:
       - integration/upstream-20261008
+      - integration/upstream-20261010-core065-candidate
   workflow_dispatch:
 
 permissions:
@@ -63,8 +65,8 @@ jobs:
         run: pnpm exec jest --runInBand
       - name: Lint without reducing baseline
         run: pnpm exec eslint src --max-warnings 287
-      - name: Check high and critical production dependencies
-        run: pnpm audit --prod --audit-level high
+      - name: Check moderate and higher production dependencies
+        run: pnpm audit --prod --audit-level moderate
       - name: Compile Web with source-bound fork Core
         run: pnpm exec webpack --mode production
 

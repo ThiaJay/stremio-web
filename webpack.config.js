@@ -11,6 +11,7 @@ const WorkboxPlugin = require('workbox-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const packageJson = require('./package.json');
+const { historyApiFallback } = require('./spaHistoryFallback.cjs');
 
 const COMMIT_HASH = execSync('git rev-parse HEAD').toString().trim();
 
@@ -193,7 +194,9 @@ module.exports = (env, argv) => ({
         static: false,
         hot: false,
         server: 'https',
-        liveReload: false
+        liveReload: false,
+        // Support app deep links without rewriting unknown endpoints or missing assets.
+        historyApiFallback
     },
     optimization: {
         minimize: true,
