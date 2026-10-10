@@ -1,0 +1,18 @@
+{
+    "status":  "staged candidate only; not an npm release or accepted production artefact",
+    "coreSourceSha":  "303d7c0bb8bd6d55f11f2f751e55e66040da4f8c",
+    "tarballName":  "stremio-stremio-core-web-0.65.0.tgz",
+    "sha256":  "305cb2fb6c78ff6c719aa4713ddfd719787f38ef1069bb198592e6bda6d78c60",
+    "requirements":  [
+                         "Source identity",
+                         "Native Rust tests",
+                         "Strict Clippy and rustfmt",
+                         "WebAssembly build",
+                         "Fresh Web frozen installation and tests",
+                         "Web runtime and cross-platform acceptance before promotion"
+                     ],
+    "upstreamMergedSha":  "fa22c9ca8b8574fe7a72460023d05beff2b74026",
+    "coreWebPackage":  "0.65.0",
+    "wasmSourcePathRemapping":  "RUSTFLAGS --remap-path-prefix for local Windows workspace paths",
+    "archivePrivacyScan":  "PASSED zero local machine path or private origin findings before staging"
+}
