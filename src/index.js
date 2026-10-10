@@ -42,6 +42,11 @@ const appInfo = {
     shellVersion: null
 };
 
+// Convert legacy history-style deep links into routes understood by HashRouter.
+// Do this before creating React, preserving original encoded player paths.
+const { canonicalizeInitialClientPath } = require('../spaHistoryFallback.cjs');
+canonicalizeInitialClientPath(window.location, window.history);
+
 const root = ReactDOM.createRoot(document.getElementById('app'));
 root.render(
     <React.StrictMode>

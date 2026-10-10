@@ -33,6 +33,7 @@ RUN pnpm i express@4
 FROM base
 
 COPY http_server.js /var/www/stremio-web
+COPY spaHistoryFallback.cjs /var/www/stremio-web
 COPY --from=server /var/www/stremio-web/node_modules /var/www/stremio-web/node_modules
 COPY --from=app /var/www/stremio-web/build /var/www/stremio-web/build
 
