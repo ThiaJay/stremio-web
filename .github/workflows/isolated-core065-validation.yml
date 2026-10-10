@@ -1,0 +1,71 @@
+name: Isolated Core 0.65 Web candidate validation
+
+on:
+  push:
+    branches:
+      - integration/upstream-20261010-core065-candidate
+  pull_request:
+    branches:
+      - integration/upstream-20261008
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isolated-core065-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Reject private source paths in staged Core package
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import tarfile
+          from pathlib import Path
+          path = Path('vendor/core-web/stremio-stremio-core-web-0.65.0.tgz')
+          if not path.is_file():
+              raise SystemExit('staged Core archive missing')
+          forbidden = (bytes([65, 58, 92]) + b'Worktrees', bytes([67, 58, 92]) + b'Users', b'.elfhosted.com',
+                       b'Authorization: Bearer', b'session_cookie', b'private/access-path')
+          with tarfile.open(path, 'r:gz') as archive:
+              for member in archive.getmembers():
+                  if not member.isfile():
+                      continue
+                  if member.name.startswith('/') or '..' in member.name.split('/'):
+                      raise SystemExit('invalid archive path')
+                  content = archive.extractfile(member).read()
+                  if any(value.lower() in content.lower() for value in forbidden):
+                      raise SystemExit('source privacy gate failed')
+          print('Staged Core archive contains no forbidden paths')
+          PY
+      - name: Install from portable frozen lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Test source binding and user facing regressions
+        run: pnpm exec jest --runInBand
+      - name: Lint without reducing baseline
+        run: pnpm exec eslint src --max-warnings 287
+      - name: Check high and critical production dependencies
+        run: pnpm audit --prod --audit-level high
+      - name: Compile Web with source-bound fork Core
+        run: pnpm exec webpack --mode production
+
+# Intentionally no upload, Pages publishing, release or deployment steps.
