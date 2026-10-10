@@ -1,4 +1,4 @@
-const { isClientRoute, historyApiFallback } = require('../spaHistoryFallback.cjs');
+const { isClientRoute, historyApiFallback, canonicalizeInitialClientPath } = require('../spaHistoryFallback.cjs');
 
 describe('SPA history fallback', () => {
     test.each([
@@ -35,5 +35,39 @@ describe('SPA history fallback', () => {
     test('uses one entry point, including for dotted player deep links', () => {
         expect(historyApiFallback.rewrites[0].to).toBe('/index.html');
         expect(isClientRoute('/player/https%3A%2F%2Fexample.org%2Fvideo.mkv')).toBe(true);
+    });
+});
+
+describe('browser deep links to HashRouter', () => {
+    const cases = [
+        ['/intro', '', '', '/#/intro'],
+        ['/library', '', '', '/#/library'],
+        ['/search', '?query=Alone%20S13', '', '/#/search?query=Alone%20S13'],
+        ['/settings', '', '', '/#/settings'],
+        ['/continuewatching', '', '', '/#/continuewatching'],
+        ['/metadetails/series/tt12345:1:1', '', '', '/#/metadetails/series/tt12345:1:1'],
+        ['/player/https%3A%2F%2Fexample.org%2Fepisode.mkv', '', '', '/#/player/https%3A%2F%2Fexample.org%2Fepisode.mkv'],
+        ['/library', '', '#/search?query=Alone', '/#/search?query=Alone']
+    ];
+    test.each(cases)('canonicalises %s without decoding provider URLs or losing route state', (pathname, search, hash, destination) => {
+        const history = { state: { navigation: 'preserved' }, replaceState: jest.fn() };
+        const location = { pathname, search, hash };
+        expect(canonicalizeInitialClientPath(location, history)).toBe(true);
+        expect(history.replaceState).toHaveBeenCalledTimes(1);
+        expect(history.replaceState).toHaveBeenCalledWith(history.state, '', destination);
+    });
+
+    test.each(['/', '/api/private', '/not-real.js', '/playeroops', '/searching'])(
+        'does not rewrite unrelated request paths %s', pathname => {
+            const history = { replaceState: jest.fn() };
+            expect(canonicalizeInitialClientPath({ pathname, search: '', hash: '' }, history)).toBe(false);
+            expect(history.replaceState).not.toHaveBeenCalled();
+        }
+    );
+    test('keeps unknown hash fragments and refuses missing browser history APIs', () => {
+        const history = { replaceState: jest.fn() };
+        expect(canonicalizeInitialClientPath({ pathname: '/library', hash: '#some-anchor' }, history)).toBe(false);
+        expect(canonicalizeInitialClientPath({ pathname: '/library', hash: '' }, null)).toBe(false);
+        expect(history.replaceState).not.toHaveBeenCalled();
     });
 });

@@ -17,4 +17,17 @@ const historyApiFallback = {
     ]
 };
 
-module.exports = { isClientRoute, historyApiFallback };
+// HashRouter owns client routes. A recognised HTTP path must be converted
+// before React mounts, or a direct /library URL silently opens the home screen.
+function canonicalizeInitialClientPath(location, history) {
+    if (!location || !history || typeof history.replaceState !== 'function' ||
+        !isClientRoute(location.pathname)) return false;
+    const hash = typeof location.hash === 'string' ? location.hash : '';
+    if (hash && !hash.startsWith('#/')) return false;
+    const search = typeof location.search === 'string' ? location.search : '';
+    const next = '/' + (hash || '#' + location.pathname + search);
+    history.replaceState(history.state, '', next);
+    return true;
+}
+
+module.exports = { isClientRoute, historyApiFallback, canonicalizeInitialClientPath };
