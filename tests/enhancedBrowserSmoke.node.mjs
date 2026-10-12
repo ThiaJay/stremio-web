@@ -30,7 +30,7 @@ const server=http.createServer((req,res)=>{
     res.setHeader('Cache-Control','no-store');
     // Only this ephemeral test server injects diagnostics; bundled sources stay unchanged.
     if (path.extname(file)==='.html') {
-        const hook=`<script>(function(){function record(e){var msg=String(e&&e.message||e&&e.reason&&e.reason.message||'unknown error');document.documentElement.setAttribute('data-qa-runtime-error',msg.slice(0,180));}window.addEventListener('error',record);window.addEventListener('unhandledrejection',record);})();<`+'/script>';
+        const hook=`<script>(function(){document.documentElement.setAttribute('data-qa-probe','executed');function record(e){var msg=String(e&&e.message||e&&e.reason&&e.reason.message||'unknown error');document.documentElement.setAttribute('data-qa-runtime-error',msg.slice(0,180));}window.addEventListener('error',record);window.addEventListener('unhandledrejection',record);document.addEventListener('DOMContentLoaded',function(){document.documentElement.setAttribute('data-qa-dom-ready','yes');});window.addEventListener('load',function(){document.documentElement.setAttribute('data-qa-window-loaded','yes');});})();<`+'/script>';
         const html=fs.readFileSync(file,'utf8');
         return void res.end(html.replace('<head>','<head>'+hook));
     }
@@ -66,7 +66,10 @@ try{
     const scripts=requests.filter(x=>/\/scripts\/(?:main|worker)\.js$/.test(x));
     const runtimeError=(output.match(/data-qa-runtime-error="([^"]{0,200})"/)||[])[1]||null;
     if (!/^\s*<(?:div|main|section|header|nav|aside|span|img|button)/i.test(root)) {
-        console.error(JSON.stringify({result:'BROWSER_ROOT_NOT_MOUNTED',scriptAssetsFetched:scripts.length,staticRequestCount:requests.length,runtimeError:runtimeError&&runtimeError.replace(/https?:\/\/[^\s<>]+/g,'[origin]').replace(/\/home\/[^\s<>]+/g,'[local path]').slice(0,150)}));
+        const probe=(output.match(/data-qa-probe="([^"]*)"/)||[])[1]||null;
+        const domReady=(output.match(/data-qa-dom-ready="([^"]*)"/)||[])[1]||null;
+        const windowLoaded=(output.match(/data-qa-window-loaded="([^"]*)"/)||[])[1]||null;
+        console.error(JSON.stringify({result:'BROWSER_ROOT_NOT_MOUNTED',scriptAssetsFetched:scripts.length,staticRequestCount:requests.length,probe,domReady,windowLoaded,runtimeError:runtimeError&&runtimeError.replace(/https?:\/\/[^\s<>]+/g,'[origin]').replace(/\/home\/[^\s<>]+/g,'[local path]').slice(0,150)}));
     }
     assert.match(root,/^\s*<(?:div|main|section|header|nav|aside|span|img|button)/i,'Client React tree must mount in the app root');
     assert.ok(requests.some(x=>/\/scripts\/main\.js$/.test(x)),'Browser must actually request compiled app JS');
