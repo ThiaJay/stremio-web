@@ -64,13 +64,52 @@ function buildOriginalPcmWav() {
   }
   if(!active)throw Error('Real Chromium Web Audio graph did not become active: '+session.snapshot().status);
   if(media.error || media.paused || media.volume!==0.46)throw Error('Media playback or volume altered');
+  // Independently render actual Chrome Web Audio PCM with exactly the policy
+  // compressor parameters. This checks dynamic range reduction without
+  // claiming that a physical speaker or addon media was ever exercised.
+  async function renderLocalPcm(compress){
+    const rate=16000,frames=rate*2,ctx=new OfflineAudioContext(1,frames,rate);
+    const pcm=ctx.createBuffer(1,frames,rate);
+    const data=pcm.getChannelData(0);
+    for(let i=0;i<frames;i++){
+      const amplitude=i<rate?0.06:0.65;
+      data[i]=Math.sin(2*Math.PI*440*i/rate)*amplitude;
+    }
+    const source=ctx.createBufferSource();source.buffer=pcm;
+    if(compress){
+      const p=window.__NightAudioPolicy.PRESETS.strong;
+      const cmp=ctx.createDynamicsCompressor();
+      cmp.threshold.value=20*Math.log10(p.threshold);
+      cmp.knee.value=8;cmp.ratio.value=p.ratio;
+      cmp.attack.value=p.attackMs/1000;cmp.release.value=p.releaseMs/1000;
+      const trim=ctx.createGain();trim.gain.value=0.9;
+      source.connect(cmp);cmp.connect(trim);trim.connect(ctx.destination);
+    }else source.connect(ctx.destination);
+    source.start(0);
+    const result=await ctx.startRendering(),samples=result.getChannelData(0);
+    function rms(from,to){
+      let sum=0,count=0;
+      for(let i=from;i<to;i++){sum+=samples[i]*samples[i];count++;}
+      return Math.sqrt(sum/count);
+    }
+    return {low:rms(rate*0.3,rate*0.9),high:rms(rate*1.3,rate*1.9)};
+  }
+  const original=await renderLocalPcm(false);
+  const processed=await renderLocalPcm(true);
+  const originalContrast=original.high/original.low;
+  const processedContrast=processed.high/processed.low;
+  if(!Number.isFinite(processedContrast)||
+      !(processedContrast<originalContrast*0.80)||
+      !(processedContrast>1.15)||
+      !(processed.high<original.high*0.80))
+    throw Error('Chromium compressor did not reduce synthetic PCM dynamic range');
   session.configure({when:'off'});
   if(session.snapshot().status!=='off'||media.paused||media.volume!==0.46)
       throw Error('Off did not restore original media path');
   session.destroy();
   media.pause();
   media.remove();
-  output.textContent='HTMLVIDEO_BROWSER_GRAPH_PASS';
+  output.textContent='HTMLVIDEO_BROWSER_GRAPH_AND_COMPRESSOR_PASS';
 })().catch(error=>{
   output.textContent='HTMLVIDEO_BROWSER_GRAPH_FAIL';
   console.error('Synthetic browser smoke failed',error.message);
@@ -126,7 +165,7 @@ server.listen(0, '127.0.0.1', () => {
         server.close();
         fs.rmSync(tmp, { recursive: true, force: true });
         const passed = !timedOut && code === 0 &&
-            html.includes('<output id="smoke">HTMLVIDEO_BROWSER_GRAPH_PASS</output>');
+            html.includes('<output id="smoke">HTMLVIDEO_BROWSER_GRAPH_AND_COMPRESSOR_PASS</output>');
         if (!passed) {
             console.error('BROWSER_SMOKE_NOT_ACCEPTED');
             console.error('Chrome status',code,'signal',signal,'timedOut',timedOut);
@@ -134,8 +173,8 @@ server.listen(0, '127.0.0.1', () => {
             console.error(html.slice(-3200));
             process.exitCode = 1;
         } else {
-            console.log('HTMLVIDEO_BROWSER_GRAPH_PASS');
-            console.log('Synthetic same-origin media, real Chromium AudioContext and restored bypass verified.');
+            console.log('HTMLVIDEO_BROWSER_GRAPH_AND_COMPRESSOR_PASS');
+            console.log('Synthetic local media graph, PCM dynamic range compression and bypass verified.');
             console.log('No account, third-party source, speaker output or physical Android audio claimed.');
         }
     });
