@@ -2,6 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'org.thiajay.stremioenhanced.tv'
     compileSdk 36
+    buildFeatures { buildConfig true }
     defaultConfig {
         applicationId 'org.thiajay.stremioenhanced.tv'
         minSdk 26
