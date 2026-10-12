@@ -11,7 +11,7 @@ type NightAudioProfile = {
     when: Mode,
     configuration: 'automatic' | 'custom',
     strength: Strength,
-    schedule: { timeZone: string, windows: Array<{ start: string, end: string }> },
+    schedule: { timeZone: string, windows: { start: string, end: string }[] },
     speakers: { size: string, layout: string, subwoofer: string },
 };
 type NightAudioState = {
@@ -117,7 +117,7 @@ const AudioMenu = memo(forwardRef<HTMLDivElement, Props>(({
                     <div className={styles['mode-row']} role="group" aria-label={t('NIGHT_AUDIO_ACTIVATION', { defaultValue: 'Night Audio activation' })}>
                         {([
                             ['off', 'Off'], ['always', 'Always'], ['scheduled', 'Scheduled'],
-                        ] as Array<[Mode, string]>).map(([mode, label]) => (
+                        ] as [Mode, string][]).map(([mode, label]) => (
                             <Button
                                 key={mode}
                                 className={classNames(styles['mode-button'], {
