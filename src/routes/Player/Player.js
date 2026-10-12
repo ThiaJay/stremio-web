@@ -36,6 +36,7 @@ const { default: useKeyboardSeek } = require('./useKeyboardSeek');
 const { default: usePlaybackSpeedHold } = require('./usePlaybackSpeedHold');
 const { default: useStatistics } = require('./useStatistics');
 const useVideo = require('./useVideo');
+const nightAudioSettings = require('./nightAudioSettings');
 const { default: useAudio } = require('./useAudio');
 const { default: useSubtitles } = require('./useSubtitles');
 const styles = require('./styles');
@@ -52,6 +53,11 @@ const commitSkipSegment = require('./commitSkipSegment');
 const GAMEPAD_HANDLER_ID = 'player';
 
 const CAST_DEVICES_REFRESH_INTERVAL = 5000;
+
+const getNightAudioStorage = () => {
+    try { return typeof window !== 'undefined' ? window.localStorage : null; }
+    catch (_) { return null; }
+};
 
 const Player = () => {
     const { stream, streamTransportUrl, metaTransportUrl, type, id, videoId } = useParams();
@@ -79,6 +85,20 @@ const Player = () => {
     const streamingServer = useStreamingServer();
     const statistics = useStatistics(player, streamingServer);
     const video = useVideo();
+    const [nightAudioPreferences, setNightAudioPreferences] = React.useState(() =>
+        nightAudioSettings.readState(getNightAudioStorage()));
+    const [nightAudioSaved, setNightAudioSaved] = React.useState(true);
+    const nightAudioProfile = React.useMemo(() =>
+        nightAudioSettings.selectedProfile(nightAudioPreferences), [nightAudioPreferences]);
+    const onNightAudioRouteChanged = React.useCallback((route) => {
+        setNightAudioPreferences((current) => nightAudioSettings.chooseRoute(current, route));
+    }, []);
+    const onNightAudioProfileChanged = React.useCallback((patch) => {
+        setNightAudioPreferences((current) => nightAudioSettings.changeProfile(current, patch));
+    }, []);
+    React.useEffect(() => {
+        setNightAudioSaved(nightAudioSettings.writeState(getNightAudioStorage(), nightAudioPreferences));
+    }, [nightAudioPreferences]);
     const routeFocused = useRouteFocused();
     const platform = usePlatform();
     const toast = useToast();
@@ -185,6 +205,13 @@ const Player = () => {
     const [casting, setCasting] = React.useState(() => {
         return services.chromecast.active && services.chromecast.transport.getCastState() === cast.framework.CastState.CONNECTED;
     });
+    const hasNightAudioAdapter = video.state.manifest?.commands?.includes('setNightAudio') === true;
+    const nightAudioSupported = hasNightAudioAdapter && !casting;
+    React.useEffect(() => {
+        if (hasNightAudioAdapter) {
+            video.setNightAudio(casting ? { when: 'off' } : nightAudioProfile);
+        }
+    }, [hasNightAudioAdapter, casting, nightAudioProfile, video.setNightAudio]);
     const playbackDevices = React.useMemo(() => streamingServer.playbackDevices !== null && streamingServer.playbackDevices.type === 'Ready' ? streamingServer.playbackDevices.content : [], [streamingServer]);
 
     const playerRef = React.useRef(null);
@@ -1332,6 +1359,14 @@ const Player = () => {
                     audioTracks={video.state.audioTracks}
                     selectedAudioTrackId={video.state.selectedAudioTrackId}
                     onAudioTrackSelected={onAudioTrackSelected}
+                    nightAudioSupported={nightAudioSupported}
+                    nightAudioState={video.state.nightAudio}
+                    nightAudioProfile={nightAudioProfile}
+                    nightAudioRoute={nightAudioPreferences.route}
+                    nightAudioRouteOptions={nightAudioSettings.ROUTES}
+                    nightAudioSaved={nightAudioSaved}
+                    onNightAudioRouteChanged={onNightAudioRouteChanged}
+                    onNightAudioProfileChanged={onNightAudioProfileChanged}
                 />
             </Transition>
             <Transition when={speedMenuOpen} name={'fade'}>
