@@ -1,0 +1,102 @@
+name: Night Audio integrated Web and Video verification
+on:
+  push:
+    branches:
+      - feature/night-audio-video-integration-20261012
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: night-audio-merged-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  isolated:
+    if: github.event.head_commit.message != 'Night Audio integration lockfile recorded'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Verify declared source pin and patch removal
+        shell: bash
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const p = require('./package.json');
+          const expected = 'github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687';
+          if (p.dependencies['@stremio/stremio-video'] !== expected) {
+            process.exitCode = 1;
+            throw Error('Video dependency differs from reviewed source');
+          }
+          if (fs.readFileSync('pnpm-workspace.yaml', 'utf8').includes("'@stremio/stremio-video@0.0.98':")) {
+            throw Error('Obsolete Video patch still active');
+          }
+          JS
+      - name: Regenerate only frozen dependency contract
+        run: pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
+      - name: Install exact dependency tree without install scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Assert delivered video contains Night Audio backend and previous safety contract
+        shell: bash
+        run: |
+          node - <<'JS'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const root = 'node_modules/@stremio/stremio-video';
+          const pkg = JSON.parse(fs.readFileSync(root + '/package.json', 'utf8'));
+          assert.equal(pkg.version, '0.0.99');
+          const session = fs.readFileSync(root + '/src/audio/MpvNightAudioSession.js', 'utf8');
+          const shell = fs.readFileSync(root + '/src/ShellVideo/ShellVideo.js', 'utf8');
+          assert.ok(session.includes('classifyAudio'));
+          for (const str of ["'setNightAudio'", "if (propName === 'stream') return stream;", 'stream = null;', 'props.seeking === true']) {
+            assert.ok(shell.includes(str), 'Missing required backend or playback safety: ' + str);
+          }
+          console.log('Exact video package source and Web lifecycle safeguards present');
+          JS
+      - name: Full source regressions
+        run: pnpm exec jest --runInBand
+      - name: Lint within existing limit
+        run: pnpm exec eslint src --max-warnings 287
+      - name: Produce isolated Web build
+        run: pnpm exec webpack --mode production
+      - name: Production dependency advisory gate
+        run: pnpm audit --prod --audit-level moderate
+      - name: Save only validated dependency lockfile when branch lease matches
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          branch="feature/night-audio-video-integration-20261012"
+          remote_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha')"
+          if [[ "$remote_sha" != "$EXPECTED_SHA" ]]; then
+            echo 'Candidate branch moved. Refusing stale lockfile write.'
+            exit 1
+          fi
+          git add -- pnpm-lock.yaml
+          if git diff --cached --quiet; then
+            echo 'Frozen lockfile was already exact'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Night Audio integration lockfile recorded'
+          git -c credential.helper='!gh auth git-credential' push origin "HEAD:refs/heads/$branch"
+# No releases, preview uploads, private data, installations or Pages deployment.
