@@ -25,6 +25,7 @@ const useVideo = () => {
         videoScale: null,
         avSync: null,
         playbackHealth: null,
+        nightAudio: null,
         videoParams: null,
         hdrInfo: null,
         audioTracks: [],
@@ -181,6 +182,14 @@ const useVideo = () => {
         });
     }, [dispatch]);
 
+    const setNightAudio = React.useCallback((profile) => {
+        dispatch({
+            type: 'command',
+            commandName: 'setNightAudio',
+            commandArgs: { profile },
+        });
+    }, [dispatch]);
+
     const setSubtitlesTextColor = React.useCallback((color) => {
         setProp('subtitlesTextColor', color);
         setProp('extraSubtitlesTextColor', color);
@@ -228,6 +237,7 @@ const useVideo = () => {
             ...state,
             manifest,
             live: null,
+            nightAudio: null,
         }));
         manifest.props.forEach((propName) => dispatch(({ type: 'observeProp', propName })));
 
@@ -283,6 +293,7 @@ const useVideo = () => {
         setFullscreen,
         correctAvSync,
         recoverPlayback,
+        setNightAudio,
     };
 };
 

@@ -29,6 +29,7 @@ const ControlBar = React.forwardRef(({
     playbackSpeed,
     subtitlesTracks,
     audioTracks,
+    nightAudioMenuAvailable,
     metaItem,
     nextVideo,
     stream,
@@ -203,7 +204,7 @@ const ControlBar = React.forwardRef(({
                     <Button className={classnames(styles['control-bar-button'], { 'disabled': !Array.isArray(subtitlesTracks) || subtitlesTracks.length === 0 })} tabIndex={-1} onMouseDown={onSubtitlesButtonMouseDown} onClick={onToggleSubtitlesMenu}>
                         <Icon className={styles['icon']} name={'subtitles'} />
                     </Button>
-                    <Button className={classnames(styles['control-bar-button'], { 'disabled': !Array.isArray(audioTracks) || audioTracks.length === 0 })} tabIndex={-1} onMouseDown={onAudioButtonMouseDown} onClick={onToggleAudioMenu}>
+                    <Button className={classnames(styles['control-bar-button'], { 'disabled': (!Array.isArray(audioTracks) || audioTracks.length === 0) && !nightAudioMenuAvailable })} tabIndex={-1} onMouseDown={onAudioButtonMouseDown} onClick={onToggleAudioMenu}>
                         <Icon className={styles['icon']} name={'audio-tracks'} />
                     </Button>
                     {
@@ -244,6 +245,7 @@ ControlBar.propTypes = {
     onVideoScaleChanged: PropTypes.func,
     subtitlesTracks: PropTypes.array,
     audioTracks: PropTypes.array,
+    nightAudioMenuAvailable: PropTypes.bool,
     metaItem: PropTypes.object,
     nextVideo: PropTypes.object,
     stream: PropTypes.object,
