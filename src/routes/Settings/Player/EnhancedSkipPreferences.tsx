@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MultiselectMenu } from 'stremio/components';
 import { Option } from '../components';
 import * as enhancedSkipModes from '../../Player/enhancedSkipModes';
@@ -18,6 +19,7 @@ function getLocalStorage(): Storage | null {
 }
 
 const EnhancedSkipPreferences = () => {
+    const { t } = useTranslation();
     const [preferences, setPreferences] = useState(() => enhancedSkipModes.readState(getLocalStorage()));
     const [message, setMessage] = useState('');
     const options = useMemo(() => enhancedSkipModes.MODES.map((value) => ({value, label: VALUE_LABELS[value]})), []);
@@ -38,7 +40,7 @@ const EnhancedSkipPreferences = () => {
     return (
         <>
             <Option label={'ENHANCED_SKIP_HELP'} labelDefault={'Individual skip choices apply only to valid Stremio Core segments. The main Skip setting must not be Never. These choices stay on this device.'}>
-                <span role={'note'}>{'Official Skip Gaps entitlements and the selected video remain unchanged.'}</span>
+                <span role={'note'}>{t('ENHANCED_SKIP_SCOPE_NOTICE', { defaultValue: 'Official Skip Gaps entitlements and the selected video remain unchanged.' })}</span>
             </Option>
             {enhancedSkipModes.KINDS.map((kind) => (
                 <Option key={kind} label={`ENHANCED_SKIP_${kind.toUpperCase()}`} labelDefault={`Enhanced ${LABELS[kind]}`}>
