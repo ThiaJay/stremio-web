@@ -1,0 +1,45 @@
+name: Stremio Enhanced actual Chromium HTMLVideo Night Audio smoke
+
+on:
+  push:
+    branches:
+      - feature/enhanced-htmlvideo-night-audio-20261012-v1
+    paths:
+      - tests/enhancedNightAudioRealBrowserSmoke.cjs
+      - .github/workflows/enhanced-night-audio-chromium.yml
+      - package.json
+      - pnpm-lock.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source without stored credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Set up Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Use reviewed frozen package source
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Confirm a real Chromium engine is installed
+        run: |
+          command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser
+          openssl version
+      - name: Test locally generated audio in a real, anonymous HTTPS Chromium context
+        run: node tests/enhancedNightAudioRealBrowserSmoke.cjs
+
+# No account, provider, device install, video title, private configuration,
+# external stream, build publication, installer or broad browser entitlement.
