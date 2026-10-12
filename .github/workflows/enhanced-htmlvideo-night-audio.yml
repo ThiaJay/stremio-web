@@ -1,0 +1,72 @@
+name: Stremio Enhanced HTMLVideo Night Audio dependency acceptance
+
+on:
+  push:
+    branches:
+      - feature/enhanced-htmlvideo-night-audio-20261012-v1
+    paths:
+      - package.json
+      - pnpm-lock.yaml
+      - .github/workflows/enhanced-htmlvideo-night-audio.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact isolated Web candidate without credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Validate untouched Core vendor package and exact Video source
+        run: |
+          node - <<'JS'
+          const fs=require('node:fs'), crypto=require('node:crypto');
+          const pkg=require('./package.json');
+          const provenance=require('./vendor/core-web/provenance.json');
+          const expected='cdf2ba7b0a0a3ffe100c0da810d271e750d72a28';
+          if(pkg.dependencies['@stremio/stremio-video']!==
+            'github:ThiaJay/stremio-video#'+expected)throw Error('Video fork drift');
+          if(pkg.dependencies['@stremio/stremio-core-web']!==
+            'file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz')throw Error('Core source changed');
+          const bytes=fs.readFileSync('vendor/core-web/'+provenance.tarballName);
+          if(crypto.createHash('sha256').update(bytes).digest('hex')!==provenance.sha256)throw Error('Core archive drift');
+          console.log('Verified exact Video head and original bundled Core');
+          JS
+      - name: Calculate reproducible frozen dependency reconciliation without committing
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp pnpm-lock.yaml /tmp/stremio-original-lock.yaml
+          pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
+          if ! cmp -s /tmp/stremio-original-lock.yaml pnpm-lock.yaml; then
+            echo 'STREMIO_VIDEO_LOCK_DELTA_BEGIN'
+            diff -u /tmp/stremio-original-lock.yaml pnpm-lock.yaml || test "$?" -eq 1
+            echo 'STREMIO_VIDEO_LOCK_DELTA_END'
+          else
+            echo 'STREMIO_VIDEO_LOCK_RECONCILED'
+          fi
+      - name: Check exact frozen install, Web regressions and compiled product
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
+          pnpm exec jest --runInBand
+          pnpm exec eslint src --max-warnings 287
+          pnpm audit --prod --audit-level moderate
+          pnpm exec webpack --mode production
+
+# All work remains in an isolated draft source branch with no artifact upload,
+# signing, release, account, addon, playback or production-device access.
