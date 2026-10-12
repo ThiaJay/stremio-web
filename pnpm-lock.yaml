@@ -46,8 +46,8 @@ importers:
         specifier: 5.15.0
         version: 5.15.0
       '@stremio/stremio-video':
-        specifier: github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687
-        version: https://codeload.github.com/ThiaJay/stremio-video/tar.gz/a5ef2c6729d74a39f0096422365633d18cf5a687
+        specifier: github:ThiaJay/stremio-video#cdf2ba7b0a0a3ffe100c0da810d271e750d72a28
+        version: https://codeload.github.com/ThiaJay/stremio-video/tar.gz/cdf2ba7b0a0a3ffe100c0da810d271e750d72a28
       bowser:
         specifier: 2.14.1
         version: 2.14.1
@@ -1465,8 +1465,8 @@ packages:
   '@stremio/stremio-icons@5.15.0':
     resolution: {integrity: sha512-UaYBgpJBaHZOPLhfZkAIzf99Xy62mxvEKOmeOeNmsSCSc05O05/FXihbA3zKefZBKN6cOy8uWBRGsCrXryV4zg==}
 
-  '@stremio/stremio-video@https://codeload.github.com/ThiaJay/stremio-video/tar.gz/a5ef2c6729d74a39f0096422365633d18cf5a687':
-    resolution: {gitHosted: true, integrity: sha512-m8i+D/t9VErTWGo9H1Db685UnXRBGi5KF7QyJ3E1XopwuJBOkBx7xjWs6wU8xsc9q8NveuXW7S36NBHUe4r0CQ==, tarball: https://codeload.github.com/ThiaJay/stremio-video/tar.gz/a5ef2c6729d74a39f0096422365633d18cf5a687}
+  '@stremio/stremio-video@https://codeload.github.com/ThiaJay/stremio-video/tar.gz/cdf2ba7b0a0a3ffe100c0da810d271e750d72a28':
+    resolution: {gitHosted: true, integrity: sha512-wqouJAiUOW+y03WegJPtKTmGa1PPizTiBSpv/ZmRxWjPII5tlOiGY1A6t73JIi37YEnoyM5ZN29gH+bZEv85uQ==, tarball: https://codeload.github.com/ThiaJay/stremio-video/tar.gz/cdf2ba7b0a0a3ffe100c0da810d271e750d72a28}
     version: 0.0.99
 
   '@stylistic/eslint-plugin-jsx@4.4.1':
@@ -6609,7 +6609,7 @@ snapshots:
 
   '@stremio/stremio-icons@5.15.0': {}
 
-  '@stremio/stremio-video@https://codeload.github.com/ThiaJay/stremio-video/tar.gz/a5ef2c6729d74a39f0096422365633d18cf5a687':
+  '@stremio/stremio-video@https://codeload.github.com/ThiaJay/stremio-video/tar.gz/cdf2ba7b0a0a3ffe100c0da810d271e750d72a28':
     dependencies:
       '@stremio/libass-wasm': https://github.com/Stremio/JavascriptSubtitlesOctopus/releases/download/v4.2.7/stremio-libass-wasm-4.2.7.tgz
       buffer: 6.0.3
