@@ -158,6 +158,31 @@ const SubtitlesMenu = React.memo(React.forwardRef((props, ref) => {
     return (
         <div ref={ref} className={classnames(props.className, styles['subtitles-menu-container'])} onMouseDown={onMouseDown}>
             <div className={styles['languages-container']}>
+                {props.enhancedSubtitleStatus &&
+                    <div className={styles['no-variants-label']} role={'status'} aria-live={'polite'}>
+                        {props.enhancedPictureEvidence === 'suspected' ?
+                            'The source name suggests subtitles may already be in the picture. This has not been verified.' :
+                            props.enhancedSubtitleStatus === 'audio_understood' ? 'Audio language understood. Subtitles are off.' :
+                            props.enhancedSubtitleStatus === 'audio_language_unknown' ? 'Audio language is unknown. Subtitles are off until selected manually.' :
+                            props.enhancedSubtitleStatus === 'no_matching_subtitle_track' ? 'No suitable preferred subtitle track was found.' :
+                            props.enhancedSubtitleStatus === 'manual_selection' ? 'Manual subtitle choice is in control.' :
+                            props.enhancedSubtitleStatus === 'picture_subtitles_confirmed' ? 'Picture subtitles confirmed. Automatic overlays are off.' :
+                            null}
+                    </div>
+                }
+                {props.enhancedSubtitleStatus &&
+                    <div className={styles['languages-list']}>
+                        <Button title={'Picture subtitles are readable'} onClick={() => props.onEnhancedPictureChoiceChanged?.('confirmed')}>
+                            <div className={styles['language-label']}>Picture subtitles are readable</div>
+                        </Button>
+                        <Button title={'No readable picture subtitles'} onClick={() => props.onEnhancedPictureChoiceChanged?.('notPresent')}>
+                            <div className={styles['language-label']}>No readable picture subtitles</div>
+                        </Button>
+                        <Button title={'Reset picture subtitle assessment'} onClick={() => props.onEnhancedPictureChoiceChanged?.('unknown')}>
+                            <div className={styles['language-label']}>Reset picture subtitle assessment</div>
+                        </Button>
+                    </div>
+                }
                 <div className={styles['languages-header']}>{ t('PLAYER_SUBTITLES_LANGUAGES') }</div>
                 <div className={styles['languages-list']}>
                     <Button title={t('OFF')} className={classnames(styles['language-option'], { 'selected': selectedSubtitlesLanguage === null })} onClick={subtitlesLanguageOnClick}>
