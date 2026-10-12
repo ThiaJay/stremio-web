@@ -23,6 +23,15 @@ class BundlePolicyTest(unittest.TestCase):
     def test_symlink_rejected(self):
         (self.d/'steal.js').symlink_to(self.d/'index.html')
         with self.assertRaises(ValueError):bundle.assess(self.d,SHA)
+    def test_official_apple_association_is_excluded(self):
+        folder=self.d/'.well-known';folder.mkdir()
+        (folder/'apple-app-site-association').write_text('{"applinks": {"apps": []}}')
+        result=bundle.assess(self.d,SHA)
+        self.assertNotIn('.well-known/apple-app-site-association',[x['path'] for x in result['files']])
+    def test_unreviewed_hidden_association_fails(self):
+        folder=self.d/'.well-known';folder.mkdir()
+        (folder/'unreviewed-token').write_text('unexpected')
+        with self.assertRaises(ValueError):bundle.assess(self.d,SHA)
     def test_missing_worker_ref(self):
         (self.d/'index.html').write_text(self.index.replace('/scripts/worker.js','/scripts/nothing.js'))
         with self.assertRaises(ValueError):bundle.assess(self.d,SHA)
