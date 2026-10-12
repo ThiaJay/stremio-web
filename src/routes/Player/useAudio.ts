@@ -1,6 +1,7 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import enhancedSubtitlePolicy = require('./enhancedSubtitlePolicy');
 import { languages } from 'stremio/common';
 
 type Args = {
@@ -63,6 +64,18 @@ const findPreferredTrack = (
 const useAudio = ({ player, video, settings, streamStateChanged, audioPreferenceChanged }: Args) => {
     const videoRef = useRef(video);
     const trackSelectionLocked = useRef(false);
+    const [enhancedOptions, setEnhancedOptions] = useState(() =>
+        enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const refresh = (event: StorageEvent) => {
+            if (event.key === null || event.key === enhancedSubtitlePolicy.STORAGE_KEY) {
+                setEnhancedOptions(enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+            }
+        };
+        window.addEventListener('storage', refresh);
+        return () => window.removeEventListener('storage', refresh);
+    }, []);
     const appliedTrack = useRef<string | null>(null);
 
     videoRef.current = video;
@@ -92,7 +105,13 @@ const useAudio = ({ player, video, settings, streamStateChanged, audioPreference
             return;
         }
 
-        const track = findPreferredTrack(
+        const nativePreference = player.audioPreference !== null && player.audioPreference !== undefined;
+        const savedPreference = !!player.streamState?.audioTrack?.id;
+        const enhancedTrack = !nativePreference && !savedPreference ?
+            enhancedSubtitlePolicy.preferredAudioTrack(
+                video.state.audioTracks, video.state.selectedAudioTrackId, enhancedOptions, false,
+            ) : null;
+        const track = enhancedTrack || findPreferredTrack(
             video.state.audioTracks,
             video.state.selectedAudioTrackId,
             player.streamState?.audioTrack,
@@ -114,6 +133,7 @@ const useAudio = ({ player, video, settings, streamStateChanged, audioPreference
         player.audioPreference,
         player.streamState,
         settings.audioLanguage,
+        enhancedOptions,
         video.state.audioTracks,
         video.state.selectedAudioTrackId,
         video.state.stream,
