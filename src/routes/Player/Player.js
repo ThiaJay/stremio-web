@@ -47,6 +47,7 @@ const getEndPlaybackTransition = require('./getEndPlaybackTransition');
 const getSkipSegmentTarget = require('./getSkipSegmentTarget');
 const getSkipSegmentPopupOpen = require('./getSkipSegmentPopupOpen');
 const shouldAutoSkipSegment = require('./shouldAutoSkipSegment');
+const enhancedSkipModes = require('./enhancedSkipModes');
 const createSkipSegmentAttempt = require('./createSkipSegmentAttempt');
 const commitSkipSegment = require('./commitSkipSegment');
 
@@ -88,6 +89,18 @@ const Player = () => {
     const [nightAudioPreferences, setNightAudioPreferences] = React.useState(() =>
         nightAudioSettings.readState(getNightAudioStorage()));
     const [nightAudioSaved, setNightAudioSaved] = React.useState(true);
+    const [enhancedSkipPreferences, setEnhancedSkipPreferences] = React.useState(() =>
+        enhancedSkipModes.readState(getNightAudioStorage()));
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const sync = (event) => {
+            if (event.key === enhancedSkipModes.STORAGE_KEY || event.key === null) {
+                setEnhancedSkipPreferences(enhancedSkipModes.readState(getNightAudioStorage()));
+            }
+        };
+        window.addEventListener('storage', sync);
+        return () => window.removeEventListener('storage', sync);
+    }, []);
     const nightAudioProfile = React.useMemo(() =>
         nightAudioSettings.selectedProfile(nightAudioPreferences), [nightAudioPreferences]);
     const onNightAudioRouteChanged = React.useCallback((route) => {
@@ -258,6 +271,10 @@ const Player = () => {
         nextVideoRemainingTime <= settings.nextVideoNotificationDuration;
 
     const skipSegment = player.skipSegment ?? player.skipIntro ?? null;
+    const effectiveSkipMode = enhancedSkipModes.resolveMode({
+        segment: skipSegment, inheritedMode: settings.skipIntroMode ?? 'ask',
+        overrides: enhancedSkipPreferences,
+    });
     const currentVideoMatches = player.libraryItem !== null &&
         player.selected?.streamRequest?.path?.id !== undefined &&
         player.libraryItem.state.video_id === player.selected.streamRequest.path.id &&
@@ -278,13 +295,13 @@ const Player = () => {
         livePlayback, canSeek, player.stream?.type, video.state.stream, video.state.loaded, currentVideoMatches]);
     const skipSegmentTarget = skipSegmentAttempt.has(skipSegment) ? null : getSkipSegmentTarget(skipSegmentPlayback);
     const skipSegmentPopupOpen = getSkipSegmentPopupOpen({
-        segment: skipSegment,
+        segment: skipSegment, mode: effectiveSkipMode,
         target: skipSegmentTarget,
         nextVideoPopupOpen,
         dismissal: skipSegmentPopupDismissal,
     });
     const autoSkipSegment = shouldAutoSkipSegment({
-        paused: video.state.paused,
+        mode: effectiveSkipMode, paused: video.state.paused,
         nextVideoPopupOpen,
         segment: skipSegment,
         target: skipSegmentTarget,
