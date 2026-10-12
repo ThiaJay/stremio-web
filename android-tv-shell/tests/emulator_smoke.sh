@@ -109,32 +109,64 @@ if ! adb shell dumpsys activity activities | grep -Fq 'org.thiajay.stremioenhanc
 fi
 # Confirm the native Back/Home/Reload/Exit toolbar is exposed to
 # Android accessibility as labelled focusable buttons in this anonymous AVD.
-# Only the disposable virtual device is queried. Never publish its XML tree.
-ui_dump='/sdcard/enhanced-tv-toolbar-qa.xml'
-if ! timeout 35 adb shell uiautomator dump "$ui_dump" \
-    >/tmp/enhanced-tv-uiautomator.log 2>&1; then
-  echo 'ANDROID_TV_NATIVE_TOOLBAR_UIAUTOMATOR_COMMAND_FAILED'
+# UIAutomator may report success without writing a file on Android TV. Fail
+# closed unless an actual nonempty XML document is independently retrieved.
+# All potential screen contents are ephemeral, never published or logged.
+ui_capture='/tmp/enhanced-tv-toolbar-qa-private.xml'
+rm -f "$ui_capture"
+capture_ui() {
+  local remote_path="$1"
+  if adb exec-out cat "$remote_path" >"$ui_capture" 2>/dev/null &&
+      test -s "$ui_capture"; then
+    echo 'ANDROID_TV_NATIVE_TOOLBAR_XML_CAPTURED'
+    return 0
+  fi
+  rm -f "$ui_capture"
+  return 1
+}
+ui_captured=false
+for attempt in 1 2 3; do
+  # /data/local/tmp is writable by the shell user independently of external
+  # storage mounting. Never guess a path from diagnostic command output.
+  ui_dump='/data/local/tmp/enhanced-tv-toolbar-qa.xml'
+  adb shell rm -f "$ui_dump" /sdcard/window.xml \
+      /sdcard/enhanced-tv-toolbar-qa.xml >/dev/null 2>&1 || true
+  if timeout 40 adb shell uiautomator dump "$ui_dump" \
+      >/tmp/enhanced-tv-uiautomator.log 2>&1 &&
+      capture_ui "$ui_dump"; then
+    ui_captured=true
+    break
+  fi
+  # Some emulator images accept the command only with the system default
+  # destination. Its content must still be read back and validated.
+  if timeout 40 adb shell uiautomator dump \
+      >/tmp/enhanced-tv-uiautomator-default.log 2>&1; then
+    for ui_dump in /sdcard/window.xml /data/local/tmp/window.xml; do
+      if capture_ui "$ui_dump"; then
+        ui_captured=true
+        break
+      fi
+    done
+  fi
+  if [[ "$ui_captured" == true ]]; then break; fi
+  if grep -qi 'null root node' /tmp/enhanced-tv-uiautomator.log; then
+    echo 'ANDROID_TV_NATIVE_TOOLBAR_UIAUTOMATOR_NULL_ROOT'
+  elif grep -qi 'could not get idle state' /tmp/enhanced-tv-uiautomator.log; then
+    echo 'ANDROID_TV_NATIVE_TOOLBAR_UIAUTOMATOR_NOT_IDLE'
+  else
+    echo 'ANDROID_TV_NATIVE_TOOLBAR_UIAUTOMATOR_XML_NOT_WRITTEN'
+  fi
+  sleep 3
+done
+if [[ "$ui_captured" != true ]]; then
+  echo 'ANDROID_TV_NATIVE_TOOLBAR_XML_UNAVAILABLE_ON_EMULATOR'
   exit 1
 fi
-if ! adb shell test -s "$ui_dump"; then
-  echo 'ANDROID_TV_NATIVE_TOOLBAR_REQUESTED_XML_NOT_WRITTEN'
-  # Some SDK builds ignore the requested file argument. Try their documented
-  # default only, without accepting an arbitrary path read from tool output.
-  if ! timeout 35 adb shell uiautomator dump \
-      >/tmp/enhanced-tv-uiautomator-default.log 2>&1; then
-    echo 'ANDROID_TV_NATIVE_TOOLBAR_DEFAULT_CAPTURE_FAILED'
-    exit 1
-  fi
-  ui_dump='/sdcard/window.xml'
-  if ! adb shell test -s "$ui_dump"; then
-    echo 'ANDROID_TV_NATIVE_TOOLBAR_XML_UNAVAILABLE_ON_EMULATOR'
-    exit 1
-  fi
-fi
-if ! adb shell cat "$ui_dump" |
-    python3 android-tv-shell/tests/check_tv_accessibility.py; then
+if ! python3 android-tv-shell/tests/check_tv_accessibility.py <"$ui_capture"; then
+  rm -f "$ui_capture"
   echo 'ANDROID_TV_NATIVE_TOOLBAR_ACCESSIBILITY_FAILED'
   exit 1
 fi
+rm -f "$ui_capture"
 printf '%s\n' 'ANDROID_TV_ANONYMOUS_WEBVIEW_RENDER_PASS'
 printf '%s\n' 'NO_ACCOUNT_NO_EXTERNAL_STREAM_NO_DEVICE_INSTALL_NO_PRODUCTION_WRITES'
