@@ -27,6 +27,26 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Preflight hardware virtualization on this disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -e /dev/kvm ]]; then
+            echo 'ANDROID_TV_EMULATOR_BLOCKED_NO_KVM_DEVICE'
+            exit 2
+          fi
+          stat -c 'KVM_DEVICE_TYPE=%F KVM_MODE=%a KVM_OWNER=%U KVM_GROUP=%G' /dev/kvm
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            # Only adjust this ephemeral, hosted runner's KVM group membership.
+            # If host virtualization is absent, the required check still fails.
+            sudo chgrp "$(id -gn)" /dev/kvm
+            sudo chmod g+rw /dev/kvm
+          fi
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo 'ANDROID_TV_EMULATOR_BLOCKED_KVM_PERMISSION'
+            exit 2
+          fi
+          echo 'ANDROID_TV_EMULATOR_KVM_DEVICE_ACCESSIBLE'
       - name: Install pnpm
         uses: pnpm/action-setup@v6.1.0
         with:
