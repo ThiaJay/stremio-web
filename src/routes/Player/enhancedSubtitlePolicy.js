@@ -109,9 +109,9 @@ function chooseSubtitleTrack(embedded, extra, prefs) {
         }
     }
     for (const lang of prefs.subtitleLanguages) {
-        const found = candidates.find(t => t.lang === lang && !t.flags.forced && !t.flags.hearingImpaired) ||
-            candidates.find(t => t.lang === lang && !t.flags.forced) ||
-            candidates.find(t => t.lang === lang);
+        const found = candidates.find((t) => t.lang === lang && !t.flags.forced && !t.flags.hearingImpaired) ||
+            candidates.find((t) => t.lang === lang && !t.flags.forced) ||
+            candidates.find((t) => t.lang === lang);
         if (found) return { source: found.source, id: found.id, language: lang };
     }
     return null;
@@ -119,7 +119,7 @@ function chooseSubtitleTrack(embedded, extra, prefs) {
 function forcedTranslationTrack(embedded, extra, prefs) {
     for (const lang of prefs.subtitleLanguages) {
         for (const [source, tracks] of [['embedded', embedded], ['external', extra]]) {
-            const hit = (Array.isArray(tracks) ? tracks : []).find(t =>
+            const hit = (Array.isArray(tracks) ? tracks : []).find((t) =>
                 typeof t?.id === 'string' && t.id && language(t.lang) === lang &&
                 trackFlags(t).forced && !trackFlags(t).commentary);
             if (hit) return { source, id: hit.id, language: lang };
@@ -129,7 +129,7 @@ function forcedTranslationTrack(embedded, extra, prefs) {
 }
 function selectedAudioLanguage({ audioTracks, selectedAudioTrackId }) {
     const tracks = Array.isArray(audioTracks) ? audioTracks : [];
-    const selected = tracks.find(t => t?.id === selectedAudioTrackId);
+    const selected = tracks.find((t) => t?.id === selectedAudioTrackId);
     // A single enumerated track may be used only if no contradictory selection
     // exists. More than one without an actual selected ID is unknown.
     if (selected) return language(selected.lang);
@@ -140,7 +140,7 @@ function preferredAudioTrack(audioTracks, selectedAudioTrackId, prefs, manualPre
     if (manualPreference || !prefs.preferUnderstoodAudio || prefs.mode === 'stremio') return null;
     const tracks = Array.isArray(audioTracks) ? audioTracks : [];
     for (const lang of prefs.understoodLanguages) {
-        const track = tracks.find(t => typeof t?.id === 'string' && t.id && language(t.lang) === lang);
+        const track = tracks.find((t) => typeof t?.id === 'string' && t.id && language(t.lang) === lang);
         if (track) return track;
     }
     return null;
