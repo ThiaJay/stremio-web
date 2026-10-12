@@ -32,6 +32,26 @@ const sortByValues = (items, values) => items.sort((a, b) => {
     return left - right;
 });
 
+const enhancedSubtitleStatusText = (status, picture) => {
+    if (picture === 'suspected') return t('ENHANCED_SUBTITLE_SOURCE_HINT', {
+        defaultValue: 'The source name suggests subtitles may already be in the picture. This has not been verified.'
+    });
+    switch (status) {
+        case 'audio_understood':
+            return t('ENHANCED_SUBTITLE_AUDIO_UNDERSTOOD', { defaultValue: 'Audio language understood. Subtitles are off.' });
+        case 'audio_language_unknown':
+            return t('ENHANCED_SUBTITLE_AUDIO_UNKNOWN', { defaultValue: 'Audio language is unknown. Subtitles are off until selected manually.' });
+        case 'no_matching_subtitle_track':
+            return t('ENHANCED_SUBTITLE_NO_TRACK', { defaultValue: 'No suitable preferred subtitle track was found.' });
+        case 'manual_selection':
+            return t('ENHANCED_SUBTITLE_MANUAL', { defaultValue: 'Manual subtitle choice is in control.' });
+        case 'picture_subtitles_confirmed':
+            return t('ENHANCED_SUBTITLE_PICTURE_CONFIRMED', { defaultValue: 'Picture subtitles confirmed. Automatic overlays are off.' });
+        default:
+            return null;
+    }
+};
+
 const SubtitlesMenu = React.memo(React.forwardRef((props, ref) => {
     const subtitlesTracks = React.useMemo(() => {
         return normalizeTracksLang(Array.isArray(props.subtitlesTracks) ? props.subtitlesTracks : []);
@@ -160,14 +180,7 @@ const SubtitlesMenu = React.memo(React.forwardRef((props, ref) => {
             <div className={styles['languages-container']}>
                 {props.enhancedSubtitleStatus &&
                     <div className={styles['no-variants-label']} role={'status'} aria-live={'polite'}>
-                        {props.enhancedPictureEvidence === 'suspected' ?
-                            t('ENHANCED_SUBTITLE_SOURCE_HINT', { defaultValue: 'The source name suggests subtitles may already be in the picture. This has not been verified.' }) :
-                            props.enhancedSubtitleStatus === 'audio_understood' ? t('ENHANCED_SUBTITLE_AUDIO_UNDERSTOOD', { defaultValue: 'Audio language understood. Subtitles are off.' }) :
-                            props.enhancedSubtitleStatus === 'audio_language_unknown' ? t('ENHANCED_SUBTITLE_AUDIO_UNKNOWN', { defaultValue: 'Audio language is unknown. Subtitles are off until selected manually.' }) :
-                            props.enhancedSubtitleStatus === 'no_matching_subtitle_track' ? t('ENHANCED_SUBTITLE_NO_TRACK', { defaultValue: 'No suitable preferred subtitle track was found.' }) :
-                            props.enhancedSubtitleStatus === 'manual_selection' ? t('ENHANCED_SUBTITLE_MANUAL', { defaultValue: 'Manual subtitle choice is in control.' }) :
-                            props.enhancedSubtitleStatus === 'picture_subtitles_confirmed' ? t('ENHANCED_SUBTITLE_PICTURE_CONFIRMED', { defaultValue: 'Picture subtitles confirmed. Automatic overlays are off.' }) :
-                            null}
+                        {enhancedSubtitleStatusText(props.enhancedSubtitleStatus, props.enhancedPictureEvidence)}
                     </div>
                 }
                 {props.enhancedSubtitleStatus &&
@@ -305,6 +318,10 @@ SubtitlesMenu.propTypes = {
     extraSubtitlesDelay: PropTypes.number,
     extraSubtitlesSize: PropTypes.number,
     assSubtitlesStylingActive: PropTypes.bool,
+    enhancedSubtitleStatus: PropTypes.string,
+    enhancedPictureEvidence: PropTypes.string,
+    enhancedPictureChoice: PropTypes.string,
+    onEnhancedPictureChoiceChanged: PropTypes.func,
     onSubtitlesTrackSelected: PropTypes.func,
     onExtraSubtitlesTrackSelected: PropTypes.func,
     onSubtitlesOffsetChanged: PropTypes.func,
