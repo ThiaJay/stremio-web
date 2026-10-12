@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { languages } from 'stremio/common';
+import chooseAudioTrack from './chooseAudioTrack';
 
 type Args = {
     player: Player,
@@ -25,39 +26,6 @@ const normalizeLanguage = (language?: string | null) => {
 
     const value = language.trim();
     return (languages.find(value) ?? languages.find(value.toLowerCase()))?.code;
-};
-
-const findPreferredTrack = (
-    tracks: AudioTrack[],
-    selectedId: string | null,
-    savedTrack: AudioTrackState | undefined,
-    preference: AudioPreference | null,
-    globalLanguage: string | null,
-) => {
-    const preferredLanguage = normalizeLanguage(preference?.language) ?? normalizeLanguage(savedTrack?.language);
-    const saved = tracks.find((track) => track.id === savedTrack?.id);
-
-    if (saved && (!preferredLanguage || normalizeLanguage(saved.lang) === preferredLanguage)) {
-        return saved;
-    }
-
-    const selected = tracks.find((track) => track.id === selectedId);
-    const languageOrder = [preferredLanguage, normalizeLanguage(globalLanguage)];
-    for (const language of languageOrder) {
-        if (!language) {
-            continue;
-        }
-
-        const track = selected && normalizeLanguage(selected.lang) === language ?
-            selected
-            :
-            tracks.find((track) => normalizeLanguage(track.lang) === language);
-        if (track) {
-            return track;
-        }
-    }
-
-    return undefined;
 };
 
 const useAudio = ({ player, video, settings, streamStateChanged, audioPreferenceChanged }: Args) => {
@@ -92,12 +60,13 @@ const useAudio = ({ player, video, settings, streamStateChanged, audioPreference
             return;
         }
 
-        const track = findPreferredTrack(
+        const track = chooseAudioTrack(
             video.state.audioTracks,
             video.state.selectedAudioTrackId,
             player.streamState?.audioTrack,
             player.audioPreference,
             settings.audioLanguage,
+            normalizeLanguage,
         );
         if (!track) {
             appliedTrack.current = null;
