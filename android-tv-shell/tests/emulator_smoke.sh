@@ -47,6 +47,68 @@ if ! printf 'no\n' | avdmanager create avd -n enhanced_tv_qa -k "$chosen" -d "$t
   tail -25 /tmp/enhanced-tv-avd-create.log || true
   exit 2
 fi
+# Recent SDK CLI versions may create config.ini but omit the AVD index file
+# when their system-image devices.xml cannot be parsed. Repair only this exact
+# newly created ephemeral AVD, after independently checking image and config.
+if [[ -s "$avd_dir/config.ini" && ! -e "$avd_root/enhanced_tv_qa.ini" ]]; then
+  image_regex='^system-images;android-([0-9]+);android-tv;(x86|x86_64)
+  echo 'ANDROID_TV_EMULATOR_BLOCKED_AVD_NOT_REGISTERED'
+  tail -25 /tmp/enhanced-tv-avd-create.log || true
+  printf 'AVD_CONFIG_PRESENT=%s AVD_REGISTRATION_PRESENT=%s\n' \
+    "$(test -s "$avd_dir/config.ini" && echo true || echo false)" \
+    "$(test -s "$avd_root/enhanced_tv_qa.ini" && echo true || echo false)"
+  exit 2
+fi
+echo 'ANDROID_TV_EMULATOR_AVD_REGISTERED'
+"$emulator_bin" -avd enhanced_tv_qa -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -accel on -wipe-data >/tmp/enhanced-tv-emulator.stdout 2>&1 &
+emu_pid=$!
+cleanup() {
+  adb emu kill >/dev/null 2>&1 || true
+  kill "$emu_pid" >/dev/null 2>&1 || true
+  wait "$emu_pid" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+if ! timeout 240 bash -c 'until adb devices | grep -q "emulator-[0-9]*[[:space:]]*device" && [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\''\r'\'')" == 1 ]]; do sleep 3; done'; then
+  echo 'ANDROID_TV_EMULATOR_BLOCKED_BOOT_TIMEOUT'
+  if ! kill -0 "$emu_pid" 2>/dev/null; then
+    echo 'ANDROID_TV_EMULATOR_EARLY_EXIT'
+  fi
+  # Disposable emulator only: no user credentials, provider URLs, or Stremio account.
+  echo 'ANDROID_TV_EMULATOR_STARTUP_DIAGNOSTICS_BEGIN'
+  adb devices -l | sed -n '1,5p' || true
+  grep -iE 'error|warn|panic|failed|kvm|accel|fatal|virtualization|system image|avd' /tmp/enhanced-tv-emulator.stdout | tail -30 || true
+  echo 'ANDROID_TV_EMULATOR_STARTUP_DIAGNOSTICS_END'
+  exit 2
+fi
+printf 'Android emulator booted: %s\n' "$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+adb install -r "$apk" >/dev/null
+adb shell am start -n org.thiajay.stremioenhanced.tv/.EnhancedTvActivity >/dev/null
+# Never interact with account forms or video titles. Only test native launcher,
+# anonymous React boot and an uncomplicated DPAD navigation event.
+adb shell input keyevent KEYCODE_DPAD_DOWN
+if ! timeout 75 bash -c 'until adb logcat -d -s EnhancedTvSmoke:I "*:S" | grep -Fq ANONYMOUS_WEB_REACT_VISIBLE; do sleep 4; done'; then
+  echo 'ANDROID_TV_EMULATOR_FAIL_WEB_REACT_NOT_VISIBLE'
+  adb logcat -d -s AndroidRuntime:E EnhancedTvSmoke:I '*:S' | tail -25
+  exit 1
+fi
+if ! adb shell dumpsys activity activities | grep -Fq 'org.thiajay.stremioenhanced.tv'; then
+  echo 'ANDROID_TV_EMULATOR_FAIL_ACTIVITY_NOT_RESUMED'
+  exit 1
+fi
+printf '%s\n' 'ANDROID_TV_ANONYMOUS_WEBVIEW_RENDER_PASS'
+printf '%s\n' 'NO_ACCOUNT_NO_EXTERNAL_STREAM_NO_DEVICE_INSTALL_NO_PRODUCTION_WRITES'
+
+  if [[ "$chosen" =~ $image_regex ]]; then
+    image_api="${BASH_REMATCH[1]}"
+    image_abi="${BASH_REMATCH[2]}"
+    image_dir="${ANDROID_HOME:?}/system-images/android-$image_api/android-tv/$image_abi"
+    if [[ -s "$image_dir/system.img" ]]; then
+      printf 'avd.ini.encoding=UTF-8\npath=%s\npath.rel=avd/enhanced_tv_qa.avd\ntarget=android-%s\n' \
+        "$avd_dir" "$image_api" > "$avd_root/enhanced_tv_qa.ini"
+      echo 'ANDROID_TV_EMULATOR_REPAIRED_EPHEMERAL_AVD_REGISTRATION'
+    fi
+  fi
+fi
 if [[ ! -s "$avd_root/enhanced_tv_qa.ini" || ! -s "$avd_dir/config.ini" ]] ||
   ! "$emulator_bin" -list-avds | grep -Fxq enhanced_tv_qa; then
   echo 'ANDROID_TV_EMULATOR_BLOCKED_AVD_NOT_REGISTERED'
