@@ -29,16 +29,16 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Install Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
       - name: Install pnpm
         uses: pnpm/action-setup@v6.1.0
         with:
           version: 11.8.0
           run_install: false
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
       - name: Check official and customised Core and Video source pinning
         shell: bash
         run: |
