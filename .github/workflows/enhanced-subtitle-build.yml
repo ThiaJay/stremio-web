@@ -67,6 +67,8 @@ jobs:
         run: pnpm exec eslint src --max-warnings 287
       - name: Compile complete Stremio Web preview in isolation
         run: pnpm exec webpack --mode production
+      - name: Run isolated anonymous Chromium shell acceptance
+        run: node tests/enhancedBrowserSmoke.node.mjs
       - name: Check production dependency advisories
         run: pnpm audit --prod --audit-level moderate
 
