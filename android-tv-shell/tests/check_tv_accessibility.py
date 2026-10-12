@@ -22,18 +22,33 @@ def verify_toolbar(raw):
     if root.tag != 'hierarchy':
         raise ValueError('INVALID_UI_HIERARCHY_ROOT')
     observed = set()
+    app_node_count = 0
+    native_button_count = 0
+    expected_label_count = 0
     for node in root.iter('node'):
         if node.attrib.get('package') != APP_PACKAGE:
             continue
+        app_node_count += 1
         if node.attrib.get('class') != 'android.widget.Button':
             continue
+        native_button_count += 1
         name = node.attrib.get('text')
+        if name in BUTTONS:
+            expected_label_count += 1
         if (name in BUTTONS
                 and node.attrib.get('content-desc') == name
                 and node.attrib.get('clickable') == 'true'
                 and node.attrib.get('focusable') == 'true'
                 and node.attrib.get('enabled') == 'true'):
             observed.add(name)
+    # Only fixed diagnostic categories are emitted. Never log screen text,
+    # XML, other app packages, account data or view properties.
+    if app_node_count == 0:
+        raise ValueError('APP_WINDOW_NOT_IN_UI_HIERARCHY')
+    if native_button_count == 0:
+        raise ValueError('APP_HAS_NO_VISIBLE_NATIVE_BUTTON_NODES')
+    if expected_label_count == 0:
+        raise ValueError('EXPECTED_NATIVE_BUTTON_LABELS_NOT_IN_HIERARCHY')
     missing = BUTTONS - observed
     if missing:
         # Fixed expected names only, never raw screen contents.
