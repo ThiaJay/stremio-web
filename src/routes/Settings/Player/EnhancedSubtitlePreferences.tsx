@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MultiselectMenu, Toggle } from 'stremio/components';
 import { languageNames } from 'stremio/common';
 import { Option } from '../components';
@@ -7,6 +8,7 @@ import policy = require('../../Player/enhancedSubtitlePolicy');
 // Unlike Stremio Core account settings these choices remain on this device.
 // Automatic subtitle decisions never persist the current video's track in the account.
 const EnhancedSubtitlePreferences = () => {
+    const { t } = useTranslation();
     const [values, setValues] = useState(() => policy.read(policy.currentStorage()));
     const [saved, setSaved] = useState(true);
     const languageOptions = useMemo(() => {
@@ -112,8 +114,8 @@ const EnhancedSubtitlePreferences = () => {
             <Option label={'Show forced translations in understood audio'} labelDefault={'Show forced translations in understood audio'}>
                 <Toggle checked={values.forcedTranslationsForUnderstoodAudio} onClick={() => apply({ forcedTranslationsForUnderstoodAudio: !values.forcedTranslationsForUnderstoodAudio })} />
             </Option>
-            {!saved && <p role="alert">These preferences could not be saved on this device. The current session will keep them.</p>}
-            <p>Picture subtitle detection is advisory unless you confirm the text is visible. Automatic selection does not change watched history.</p>
+            {!saved && <p role="alert">{t('ENHANCED_SUBTITLE_SETTINGS_SAVE_FAILED', { defaultValue: 'These preferences could not be saved on this device. The current session will keep them.' })}</p>}
+            <p>{t('ENHANCED_SUBTITLE_PICTURE_ADVISORY', { defaultValue: 'Picture subtitle detection is advisory unless you confirm the text is visible. Automatic selection does not change watched history.' })}</p>
         </>
     );
 };
