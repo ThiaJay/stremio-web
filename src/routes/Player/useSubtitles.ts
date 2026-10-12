@@ -1,6 +1,7 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import enhancedSubtitlePolicy = require('./enhancedSubtitlePolicy');
 import { useTranslation } from 'react-i18next';
 import { CONSTANTS, getKeyboardShortcutKeys, languages, useFileDropListener, useInterval, useShortcut, useTimeout, useToast } from 'stremio/common';
 import {
@@ -191,6 +192,19 @@ const useSubtitles = ({
     const videoRef = useRef(video);
     const settingsRef = useRef(settings);
     const trackSelectionLocked = useRef(false);
+    const [enhancedOptions, setEnhancedOptions] = useState(() =>
+        enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+    const [pictureChoice, setPictureChoice] = useState<'unknown' | 'confirmed' | 'notPresent'>('unknown');
+    useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const refresh = (event: StorageEvent) => {
+            if (event.key === null || event.key === enhancedSubtitlePolicy.STORAGE_KEY) {
+                setEnhancedOptions(enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+            }
+        };
+        window.addEventListener('storage', refresh);
+        return () => window.removeEventListener('storage', refresh);
+    }, []);
     const appliedTrack = useRef<{ id: string, source: SubtitleSource } | null>(null);
     const lastSelectedTrack = useRef<SelectedSubtitleTrack | null>(null);
     const subtitleDelayHold = useRef<SubtitleDelayHold | null>(null);
@@ -409,10 +423,73 @@ const useSubtitles = ({
         trackSelectionLocked.current = false;
         appliedTrack.current = null;
         lastSelectedTrack.current = null;
+        setPictureChoice('unknown');
     }, [video.state.stream]);
+
+    const onEnhancedPictureChoiceChanged = useCallback((choice: 'unknown' | 'confirmed' | 'notPresent') => {
+        if (!['unknown', 'confirmed', 'notPresent'].includes(choice)) return;
+        setPictureChoice(choice);
+        if (choice === 'confirmed') {
+            // Viewer-confirmed picture subtitles only affect this rendered stream.
+            // They never rewrite Core account or playback state.
+            trackSelectionLocked.current = true;
+            appliedTrack.current = null;
+            const current = videoRef.current.state;
+            if (current.selectedSubtitlesTrackId !== null || current.selectedExtraSubtitlesTrackId !== null) {
+                setSubtitlesTrack(null);
+                setExtraSubtitlesTrack(null);
+            }
+        } else if (player.subtitlePreference === null || player.subtitlePreference === undefined) {
+            trackSelectionLocked.current = false;
+        }
+    }, [player.subtitlePreference, setSubtitlesTrack, setExtraSubtitlesTrack]);
+
+    const enhancedDecision = useMemo(() => enhancedSubtitlePolicy.decide({
+        options: enhancedOptions,
+        streamReady: video.state.stream !== null && video.state.loaded === true,
+        manualSubtitlePreference: player.subtitlePreference !== null && player.subtitlePreference !== undefined,
+        manualAudioPreference: player.audioPreference !== null && player.audioPreference !== undefined,
+        audioTracks: video.state.audioTracks,
+        selectedAudioTrackId: video.state.selectedAudioTrackId,
+        embeddedTracks: video.state.subtitlesTracks,
+        externalTracks: video.state.extraSubtitlesTracks,
+        pictureEvidence: {
+            sourceName: player.selected?.stream?.name,
+            verifiedByViewer: pictureChoice === 'confirmed',
+            userDismissedHint: pictureChoice === 'notPresent',
+        },
+    }), [
+        enhancedOptions, player.subtitlePreference, player.audioPreference,
+        player.selected, video.state.stream, video.state.loaded,
+        video.state.audioTracks, video.state.selectedAudioTrackId,
+        video.state.subtitlesTracks, video.state.extraSubtitlesTracks, pictureChoice,
+    ]);
 
     useEffect(() => {
         if (trackSelectionLocked.current) {
+            return;
+        }
+        if (enhancedDecision.action !== 'inherit') {
+            if (enhancedDecision.action === 'select' && enhancedDecision.track) {
+                const track = enhancedDecision.track;
+                const matching = track.source === 'embedded' ?
+                    video.state.selectedSubtitlesTrackId === track.id && video.state.selectedExtraSubtitlesTrackId === null :
+                    video.state.selectedExtraSubtitlesTrackId === track.id && video.state.selectedSubtitlesTrackId === null;
+                if (matching && appliedTrack.current?.id === track.id && appliedTrack.current.source === track.source) return;
+                if (track.source === 'embedded') setSubtitlesTrack(track.id);
+                else setExtraSubtitlesTrack(track.id);
+                const delay = player.streamState?.subtitleDelay;
+                if (track.source === 'external' && typeof delay === 'number') setSubtitlesDelay(delay);
+                appliedTrack.current = { id: track.id, source: track.source };
+                return;
+            }
+            if (enhancedDecision.action === 'off' || enhancedDecision.action === 'hold_off') {
+                if (video.state.selectedSubtitlesTrackId !== null || video.state.selectedExtraSubtitlesTrackId !== null) {
+                    setSubtitlesTrack(null);
+                    setExtraSubtitlesTrack(null);
+                }
+                appliedTrack.current = null;
+            }
             return;
         }
 
@@ -490,6 +567,7 @@ const useSubtitles = ({
             source: trackToApply.source,
         };
     }, [
+        enhancedDecision,
         player.subtitlePreference,
         player.streamState,
         settings.subtitlesLanguage,
@@ -663,10 +741,15 @@ const useSubtitles = ({
         onExtraSubtitlesOffsetChanged: changeOffset,
         onExtraSubtitlesDelayChanged: changeDelay,
         onExtraSubtitlesSizeChanged: changeSize,
+        enhancedSubtitleStatus: enhancedOptions.mode === 'stremio' ? null : enhancedDecision.reason,
+        enhancedPictureEvidence: enhancedDecision.picture,
+        enhancedPictureChoice: pictureChoice,
+        onEnhancedPictureChoiceChanged: onEnhancedPictureChoiceChanged,
     }), [
         changeDelay,
         changeOffset,
         changeSize,
+        enhancedOptions.mode, enhancedDecision, pictureChoice,
         selectEmbeddedTrack,
         selectExtraTrack,
         settings.interfaceLanguage,
