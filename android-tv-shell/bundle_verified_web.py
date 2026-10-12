@@ -36,6 +36,10 @@ def assess(src, source_sha):
         if not f.is_file():
             continue
         rel = f.relative_to(src)
+        # The original site's Apple association cannot be claimed by an unofficial
+        # Android client on an independent virtual origin. Exclude, never remap.
+        if rel.as_posix() == '.well-known/apple-app-site-association':
+            continue
         if rel.suffix.lower() == '.map':
             continue
         if rel.suffix.lower() not in ALLOWED or any(part.startswith('.') and part != '.well-known' for part in rel.parts):
