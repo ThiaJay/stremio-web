@@ -28,6 +28,21 @@ class NativeToolbarAccessibilityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'BACK'):
             verify_toolbar(fixture({'Back': {'package': 'example.invalid'}}))
 
+    def test_unrelated_foreground_window_is_not_accepted(self):
+        overrides = {name: {'package': 'android.system.placeholder'} for name in BUTTONS}
+        with self.assertRaisesRegex(ValueError, 'APP_WINDOW_NOT_IN_UI_HIERARCHY'):
+            verify_toolbar(fixture(overrides))
+
+    def test_same_app_without_native_button_nodes_is_not_accepted(self):
+        overrides = {name: {'class': 'android.widget.TextView'} for name in BUTTONS}
+        with self.assertRaisesRegex(ValueError, 'APP_HAS_NO_VISIBLE_NATIVE_BUTTON_NODES'):
+            verify_toolbar(fixture(overrides))
+
+    def test_unrecognised_button_labels_are_not_promoted(self):
+        overrides = {name: {'text': 'Unknown'} for name in BUTTONS}
+        with self.assertRaisesRegex(ValueError, 'EXPECTED_NATIVE_BUTTON_LABELS_NOT_IN_HIERARCHY'):
+            verify_toolbar(fixture(overrides))
+
     def test_button_without_focus_is_not_accepted(self):
         with self.assertRaisesRegex(ValueError, 'RELOAD'):
             verify_toolbar(fixture({'Reload': {'focusable': 'false'}}))
