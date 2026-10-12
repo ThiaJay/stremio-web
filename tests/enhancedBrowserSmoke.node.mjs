@@ -73,7 +73,16 @@ try{
     }
     assert.match(root,/^\s*<(?:div|main|section|header|nav|aside|span|img|button)/i,'Client React tree must mount in the app root');
     assert.ok(requests.some(x=>/\/scripts\/main\.js$/.test(x)),'Browser must actually request compiled app JS');
-    console.log(JSON.stringify({result:'BROWSER_SHELL_RENDERED_ANONYMOUSLY',chrome,jsAssetRequested:true,reactTreeMounted:true,externalDNSBlocked:true,accountLoginTested:false,mediaPlaybackTested:false,sourceRequests:requests.length}));
+    assert.match(output, /<title>Stremio Enhanced \(unofficial\)<\/title>/i,
+        'Application must be visibly identified as an unofficial Stremio Enhanced client');
+    const corePending=output.includes('data-enhanced-core-state="pending"');
+    const coreReady=output.includes('data-enhanced-core-state="ready"');
+    console.log(JSON.stringify({
+        result:corePending ? 'ANONYMOUS_OFFLINE_FALLBACK_VISIBLE' : 'ANONYMOUS_BROWSER_REACT_MOUNTED',
+        chrome,jsAssetRequested:true,reactTreeMounted:true,externalDNSBlocked:true,
+        coreReady,corePending,accountLoginTested:false,mediaPlaybackTested:false,
+        sourceRequests:requests.length
+    }));
 } finally {
     await new Promise(resolve=>server.close(resolve));
     fs.rmSync(profile,{recursive:true,force:true});
