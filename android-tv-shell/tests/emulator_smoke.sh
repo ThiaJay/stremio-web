@@ -107,5 +107,18 @@ if ! adb shell dumpsys activity activities | grep -Fq 'org.thiajay.stremioenhanc
   echo 'ANDROID_TV_EMULATOR_FAIL_ACTIVITY_NOT_RESUMED'
   exit 1
 fi
+# Confirm the native Back/Home/Reload/Exit toolbar is exposed to
+# Android accessibility as labelled focusable buttons in this anonymous AVD.
+if ! timeout 35 adb shell uiautomator dump /sdcard/enhanced-tv-toolbar-qa.xml \
+    >/tmp/enhanced-tv-uiautomator.log 2>&1; then
+  echo 'ANDROID_TV_NATIVE_TOOLBAR_ACCESSIBILITY_UNVERIFIED'
+  tail -12 /tmp/enhanced-tv-uiautomator.log || true
+  exit 1
+fi
+if ! adb shell cat /sdcard/enhanced-tv-toolbar-qa.xml |
+    python3 android-tv-shell/tests/check_tv_accessibility.py; then
+  echo 'ANDROID_TV_NATIVE_TOOLBAR_ACCESSIBILITY_FAILED'
+  exit 1
+fi
 printf '%s\n' 'ANDROID_TV_ANONYMOUS_WEBVIEW_RENDER_PASS'
 printf '%s\n' 'NO_ACCOUNT_NO_EXTERNAL_STREAM_NO_DEVICE_INSTALL_NO_PRODUCTION_WRITES'
