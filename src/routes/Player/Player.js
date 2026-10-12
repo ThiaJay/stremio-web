@@ -960,10 +960,10 @@ const Player = () => {
 
     useShortcut('audioMenu', React.useCallback(() => {
         closeMenus();
-        if (video.state?.audioTracks?.length > 0) {
+        if (video.state?.audioTracks?.length > 0 || video.state.stream !== null) {
             toggleAudioMenu();
         }
-    }, [closeMenus, video.state?.audioTracks?.length, toggleAudioMenu]));
+    }, [closeMenus, video.state?.audioTracks?.length, video.state.stream, toggleAudioMenu]));
 
     useShortcut('infoMenu', React.useCallback(() => {
         closeMenus();
@@ -1264,6 +1264,7 @@ const Player = () => {
                 playbackSpeed={video.state.playbackSpeed}
                 subtitlesTracks={allSubtitleTracks}
                 audioTracks={video.state.audioTracks}
+                nightAudioMenuAvailable={video.state.stream !== null}
                 metaItem={player.metaItem}
                 nextVideo={isEpg ? null : player.nextVideo}
                 stream={player.selected !== null ? player.selected.stream : null}
