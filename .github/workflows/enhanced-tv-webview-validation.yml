@@ -1,0 +1,113 @@
+name: Stremio Enhanced Android TV source integration
+
+on:
+  push:
+    branches:
+      - feature/enhanced-tv-webview-20261012-v1
+    paths:
+      - 'android-tv-shell/**'
+      - '.github/workflows/enhanced-tv-webview-validation.yml'
+  pull_request:
+    paths:
+      - 'android-tv-shell/**'
+      - '.github/workflows/enhanced-tv-webview-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: enhanced-tv-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-and-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact same-source candidate
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Check official and customised Core and Video source pinning
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'JS'
+          const fs=require('node:fs'), crypto=require('node:crypto');
+          const deps=require('./package.json').dependencies;
+          const core=require('./vendor/core-web/provenance.json');
+          if(deps['@stremio/stremio-core-web']!=='file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz')throw Error('Unknown Core package');
+          if(deps['@stremio/stremio-video']!=='github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687')throw Error('Unknown Video fork');
+          const hash=crypto.createHash('sha256').update(fs.readFileSync('vendor/core-web/'+core.tarballName)).digest('hex');
+          if(hash!==core.sha256||core.coreSourceSha!=='303d7c0bb8bd6d55f11f2f751e55e66040da4f8c')throw Error('Core artifact drift');
+          console.log('Exact inherited Core and Video source verified');
+          JS
+      - name: Install trusted lockfile without install scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Existing Web and Enhanced source regressions
+        run: |
+          node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
+          pnpm exec jest --runInBand
+          pnpm exec eslint src --max-warnings 287
+      - name: Security advisory check
+        run: pnpm audit --prod --audit-level moderate
+      - name: Rebuild exact Stremio Enhanced Web source
+        run: pnpm exec webpack --mode production
+      - name: Verify privacy-safe Web assets and host policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s android-tv-shell/tests -v
+          python3 android-tv-shell/bundle_verified_web.py \
+            --src build \
+            --dst android-tv-shell/app/src/main/assets/web \
+            --source-sha "$GITHUB_SHA"
+          python3 android-tv-shell/tests/audit_android_source.py
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Install Android SDK 36 and build tools
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;35.0.0' >/dev/null
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile and test standalone Android TV host
+        run: |
+          gradle -p android-tv-shell \
+            :app:testDebugUnitTest :app:lintDebug :app:assembleDebug \
+            --no-daemon --stacktrace
+      - name: Verify APK package, minimal permissions and embedded Web product
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android-tv-shell/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$aapt" dump badging "$apk" | grep -F "package: name='org.thiajay.stremioenhanced.tv'"
+          "$aapt" dump badging "$apk" | grep -F "sdkVersion:'26'"
+          "$aapt" dump permissions "$apk" > /tmp/enhanced-tv-permissions.txt
+          cat /tmp/enhanced-tv-permissions.txt
+          python3 android-tv-shell/tests/audit_apk.py /tmp/enhanced-tv-permissions.txt "$apk"
+          unzip -t "$apk" >/dev/null
+          sha256sum "$apk"
+          echo 'SOURCE_ONLY_PREVIEW_BUILT: NOT INSTALLED, NOT RELEASED, NOT TESTED WITH AN ACCOUNT OR ON TV.'
+# Deliberately no artifact uploads, Pages deployment, releases, signing or device connection.
