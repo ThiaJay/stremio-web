@@ -129,7 +129,7 @@ for attempt in 1 2 3; do
   # /data/local/tmp is writable by the shell user independently of external
   # storage mounting. Never guess a path from diagnostic command output.
   ui_dump='/data/local/tmp/enhanced-tv-toolbar-qa.xml'
-  adb shell rm -f "$ui_dump" /sdcard/window.xml \
+  adb shell rm -f "$ui_dump" /sdcard/window_dump.xml \
       /sdcard/enhanced-tv-toolbar-qa.xml >/dev/null 2>&1 || true
   if timeout 40 adb shell uiautomator dump "$ui_dump" \
       >/tmp/enhanced-tv-uiautomator.log 2>&1 &&
@@ -141,7 +141,7 @@ for attempt in 1 2 3; do
   # destination. Its content must still be read back and validated.
   if timeout 40 adb shell uiautomator dump \
       >/tmp/enhanced-tv-uiautomator-default.log 2>&1; then
-    for ui_dump in /sdcard/window.xml /data/local/tmp/window.xml; do
+    for ui_dump in /sdcard/window_dump.xml /data/local/tmp/window_dump.xml; do
       if capture_ui "$ui_dump"; then
         ui_captured=true
         break
@@ -149,6 +149,16 @@ for attempt in 1 2 3; do
     done
   fi
   if [[ "$ui_captured" == true ]]; then break; fi
+  # --compressed is a genuine Android UIAutomator mode and can avoid
+  # transient idle-state failures on animated TV surfaces. It must still
+  # produce a real XML hierarchy that passes the independent node validator.
+  ui_dump='/data/local/tmp/enhanced-tv-toolbar-qa.xml'
+  if timeout 40 adb shell uiautomator dump --compressed "$ui_dump" \
+      >/tmp/enhanced-tv-uiautomator-compressed.log 2>&1 &&
+      capture_ui "$ui_dump"; then
+    ui_captured=true
+    break
+  fi
   if grep -qi 'null root node' /tmp/enhanced-tv-uiautomator.log; then
     echo 'ANDROID_TV_NATIVE_TOOLBAR_UIAUTOMATOR_NULL_ROOT'
   elif grep -qi 'could not get idle state' /tmp/enhanced-tv-uiautomator.log; then
