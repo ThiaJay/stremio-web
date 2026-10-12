@@ -1,12 +1,14 @@
 {
-    "name": "Stremio Web",
-    "short_name": "Stremio",
-    "description": "Freedom To Stream",
+    "name": "Stremio Enhanced (unofficial)",
+    "short_name": "Stremio Enhanced",
+    "description": "An unofficial Stremio-compatible Web client built from open source components.",
     "background_color": "#0c0b11",
     "theme_color": "#2a2843",
     "orientation": "any",
     "display": "standalone",
-    "display_override": ["standalone"],
+    "display_override": [
+        "standalone"
+    ],
     "id": "./",
     "scope": "./",
     "start_url": "./",
