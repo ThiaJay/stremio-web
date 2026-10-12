@@ -62,6 +62,19 @@ jobs:
       - name: Check exact frozen install, Web regressions and compiled product
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
+          node - <<'JS'
+          const fs=require('node:fs');
+          const root='node_modules/@stremio/stremio-video/src/';
+          const entry=fs.readFileSync(root+'StremioVideo/StremioVideo.js','utf8');
+          const html=fs.readFileSync(root+'HTMLVideo/HTMLVideo.js','utf8');
+          const session=fs.readFileSync(root+'audio/HtmlNightAudioSession.js','utf8');
+          if(!entry.includes('video.requiresFreshInstanceForLoad()')||
+             !html.includes('nightAudio.hasCapturedMediaElement()')||
+             !session.includes('everCaptured = true')||
+             !session.includes("media.protocol === 'blob:'"))
+             throw Error('Source switch capture mitigation missing from installed Video package');
+          console.log('WEB_AUDIO_SOURCE_SWITCH_PROTECTION_PRESENT_IN_FROZEN_PACKAGE');
+          JS
           node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
           pnpm exec jest --runInBand
           pnpm exec eslint src --max-warnings 287
