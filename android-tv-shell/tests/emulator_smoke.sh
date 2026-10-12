@@ -36,7 +36,27 @@ else
   echo 'ANDROID_TV_EMULATOR_BLOCKED_NO_TV_DEVICE_PROFILE'
   exit 2
 fi
-printf 'no\n' | avdmanager create avd -n enhanced_tv_qa -k "$chosen" -d "$tv" --force >/dev/null
+# Create and verify an explicit, disposable AVD. Older avdmanager versions
+# sometimes exit 0 after reporting a device-definition error but create no .ini.
+avd_root="${HOME:?}/.android/avd"
+mkdir -p "$avd_root"
+avd_dir="$avd_root/enhanced_tv_qa.avd"
+if ! printf 'no\n' | avdmanager create avd -n enhanced_tv_qa -k "$chosen" -d "$tv" \
+  -p "$avd_dir" --force >/tmp/enhanced-tv-avd-create.log 2>&1; then
+  echo 'ANDROID_TV_EMULATOR_BLOCKED_AVD_CREATION_FAILED'
+  tail -25 /tmp/enhanced-tv-avd-create.log || true
+  exit 2
+fi
+if [[ ! -s "$avd_root/enhanced_tv_qa.ini" || ! -s "$avd_dir/config.ini" ]] ||
+  ! "$emulator_bin" -list-avds | grep -Fxq enhanced_tv_qa; then
+  echo 'ANDROID_TV_EMULATOR_BLOCKED_AVD_NOT_REGISTERED'
+  tail -25 /tmp/enhanced-tv-avd-create.log || true
+  printf 'AVD_CONFIG_PRESENT=%s AVD_REGISTRATION_PRESENT=%s\n' \
+    "$(test -s "$avd_dir/config.ini" && echo true || echo false)" \
+    "$(test -s "$avd_root/enhanced_tv_qa.ini" && echo true || echo false)"
+  exit 2
+fi
+echo 'ANDROID_TV_EMULATOR_AVD_REGISTERED'
 "$emulator_bin" -avd enhanced_tv_qa -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -accel on -wipe-data >/tmp/enhanced-tv-emulator.stdout 2>&1 &
 emu_pid=$!
 cleanup() {
