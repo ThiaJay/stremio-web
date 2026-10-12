@@ -11,7 +11,12 @@ if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
   exit 2
 fi
 sdkmanager --install emulator >/dev/null
-if ! emulator -accel-check; then
+emulator_bin="${ANDROID_HOME:?}/emulator/emulator"
+if [[ ! -x "$emulator_bin" ]]; then
+  echo 'ANDROID_TV_EMULATOR_BLOCKED_SDK_BINARY_NOT_INSTALLED'
+  exit 2
+fi
+if ! "$emulator_bin" -accel-check; then
   echo 'ANDROID_TV_EMULATOR_BLOCKED_HOST_ACCELERATOR'
   exit 2
 fi
@@ -32,7 +37,7 @@ else
   exit 2
 fi
 printf 'no\n' | avdmanager create avd -n enhanced_tv_qa -k "$chosen" -d "$tv" --force >/dev/null
-emulator -avd enhanced_tv_qa -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -accel on -wipe-data >/tmp/enhanced-tv-emulator.stdout 2>&1 &
+"$emulator_bin" -avd enhanced_tv_qa -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -accel on -wipe-data >/tmp/enhanced-tv-emulator.stdout 2>&1 &
 emu_pid=$!
 cleanup() {
   adb emu kill >/dev/null 2>&1 || true
