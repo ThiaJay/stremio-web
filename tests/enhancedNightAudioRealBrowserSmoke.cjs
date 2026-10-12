@@ -105,26 +105,38 @@ if (!chrome) throw new Error('Real headless Chromium executable not available');
 
 server.listen(0, '127.0.0.1', () => {
     const url = 'https://127.0.0.1:' + server.address().port + '/';
-    const run = cp.spawnSync(chrome, [
+    // Keep this Node HTTPS server responsive whilst the real browser loads.
+    const run = cp.spawn(chrome, [
         '--headless=new', '--no-sandbox', '--disable-dev-shm-usage',
         '--disable-gpu', '--ignore-certificate-errors',
         '--autoplay-policy=no-user-gesture-required',
         '--virtual-time-budget=20000', '--dump-dom', url,
-    ], { encoding: 'utf8', timeout: 60000, maxBuffer: 8*1024*1024 });
-    server.close();
-    fs.rmSync(tmp, { recursive: true, force: true });
-    const html = run.stdout || '';
-    const passed = run.status === 0 &&
-        html.includes('<output id="smoke">HTMLVIDEO_BROWSER_GRAPH_PASS</output>');
-    if (!passed) {
-        console.error('BROWSER_SMOKE_NOT_ACCEPTED');
-        console.error('Chrome status',run.status,'signal',run.signal);
-        console.error((run.stderr || '').slice(-2500));
-        console.error(html.slice(-3200));
-        process.exitCode=1;
-    } else {
-        console.log('HTMLVIDEO_BROWSER_GRAPH_PASS');
-        console.log('Synthetic same-origin media, real Chromium AudioContext and restored bypass verified.');
-        console.log('No account, third-party source, speaker output or physical Android audio claimed.');
-    }
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let html = '';
+    let errorText = '';
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; run.kill('SIGTERM'); }, 60000);
+    run.stdout.setEncoding('utf8');
+    run.stderr.setEncoding('utf8');
+    run.stdout.on('data', chunk => { if (html.length < 8*1024*1024) html += chunk; });
+    run.stderr.on('data', chunk => { if (errorText.length < 100000) errorText += chunk; });
+    run.on('error', error => { errorText += '\n'+String(error); });
+    run.on('close', (code, signal) => {
+        clearTimeout(timer);
+        server.close();
+        fs.rmSync(tmp, { recursive: true, force: true });
+        const passed = !timedOut && code === 0 &&
+            html.includes('<output id="smoke">HTMLVIDEO_BROWSER_GRAPH_PASS</output>');
+        if (!passed) {
+            console.error('BROWSER_SMOKE_NOT_ACCEPTED');
+            console.error('Chrome status',code,'signal',signal,'timedOut',timedOut);
+            console.error(errorText.slice(-2500));
+            console.error(html.slice(-3200));
+            process.exitCode = 1;
+        } else {
+            console.log('HTMLVIDEO_BROWSER_GRAPH_PASS');
+            console.log('Synthetic same-origin media, real Chromium AudioContext and restored bypass verified.');
+            console.log('No account, third-party source, speaker output or physical Android audio claimed.');
+        }
+    });
 });
