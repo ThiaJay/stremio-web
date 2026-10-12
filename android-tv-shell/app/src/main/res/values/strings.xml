@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Stremio Enhanced TV (unofficial)</string>
+    <string name="start">Starting Enhanced Web client…</string>
+    <string name="ready">Enhanced Web assets loaded. Waiting for the Stremio engine. Account and playback compatibility remain unverified.</string>
+    <string name="load_failed">Web client could not load. Check the device WebView and try Reload.</string>
+    <string name="render_failed">The WebView renderer stopped. Reload to restart the Enhanced client.</string>
+    <string name="blocked_link">External navigation is disabled in this preview. Your Stremio account has not been changed by the Android host.</string>
+    <string name="unofficial">Unofficial Enhanced Web client • independent from Stremio • TV source preview</string>
+    <string name="go_back">Back</string>
+    <string name="go_home">Home</string>
+    <string name="reload">Reload</string>
+    <string name="exit">Exit</string>
+</resources>
