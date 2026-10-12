@@ -174,6 +174,15 @@ if [[ "$ui_captured" != true ]]; then
 fi
 if ! python3 android-tv-shell/tests/check_tv_accessibility.py <"$ui_capture"; then
   rm -f "$ui_capture"
+  # The diagnostic must never print full dumpsys content or unknown window
+  # titles. Report only the presence of our own fixed package in focus fields.
+  if adb shell dumpsys window windows 2>/dev/null |
+      grep -E 'mCurrentFocus|mFocusedApp' |
+      grep -Fq 'org.thiajay.stremioenhanced.tv'; then
+    echo 'ANDROID_TV_NATIVE_APP_WINDOW_LISTED_AS_FOCUSED'
+  else
+    echo 'ANDROID_TV_NATIVE_APP_WINDOW_NOT_LISTED_AS_FOCUSED'
+  fi
   echo 'ANDROID_TV_NATIVE_TOOLBAR_ACCESSIBILITY_FAILED'
   exit 1
 fi
