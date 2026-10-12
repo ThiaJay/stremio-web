@@ -63,6 +63,8 @@ function buildOriginalPcmWav() {
       await new Promise(resolve=>setTimeout(resolve,150));
   }
   if(!active)throw Error('Real Chromium Web Audio graph did not become active: '+session.snapshot().status);
+  if(!session.hasCapturedMediaElement())
+    throw Error('Source-switch safety marker not set when real audio graph captured media');
   if(media.error || media.paused || media.volume!==0.46)throw Error('Media playback or volume altered');
   // Independently render actual Chrome Web Audio PCM with exactly the policy
   // compressor parameters. This checks dynamic range reduction without
@@ -106,6 +108,8 @@ function buildOriginalPcmWav() {
   session.configure({when:'off'});
   if(session.snapshot().status!=='off'||media.paused||media.volume!==0.46)
       throw Error('Off did not restore original media path');
+  if(!session.hasCapturedMediaElement())
+      throw Error('Off incorrectly forgot irreversible audio capture');
   session.destroy();
   media.pause();
   media.remove();
