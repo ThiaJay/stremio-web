@@ -3,6 +3,8 @@ import { ColorInput, MultiselectMenu, Toggle } from 'stremio/components';
 import { usePlatform } from 'stremio/common';
 import { Category, Option, Section } from '../components';
 import usePlayerOptions from './usePlayerOptions';
+import EnhancedSkipPreferences from './EnhancedSkipPreferences';
+import EnhancedSubtitlePreferences from './EnhancedSubtitlePreferences';
 
 type Props = {
     profile: Profile,
@@ -37,6 +39,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
     return (
         <Section ref={ref} label={'SETTINGS_NAV_PLAYER'}>
             <Category icon={'subtitles'} label={'SETTINGS_SECTION_SUBTITLES'}>
+                <EnhancedSubtitlePreferences />
                 <Option label={'SETTINGS_SUBTITLES_LANGUAGE'}>
                     <MultiselectMenu
                         className={'multiselect'}
@@ -131,6 +134,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                         {...skipSegmentModeSelect}
                     />
                 </Option>
+                <EnhancedSkipPreferences />
             </Category>
             <Category icon={'glasses'} label={'SETTINGS_SECTION_ADVANCED'}>
                 <Option label={'SETTINGS_PLAY_IN_EXTERNAL_PLAYER'}>
