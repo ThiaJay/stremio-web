@@ -41,6 +41,9 @@ const Menu = ({ selected, streamingServer, onSelect }: Props) => {
             </Button> }
 
             <div className={styles['spacing']} />
+            <div className={styles['version-info-label']}>
+                {t('ENHANCED_UNOFFICIAL_IDENTITY', { defaultValue: 'Stremio Enhanced is an unofficial, independently maintained client.' })}
+            </div>
             <div className={styles['version-info-label']} title={process.env.VERSION}>
                 {t('SETTINGS_APP_VERSION')}: {process.env.VERSION}
             </div>
