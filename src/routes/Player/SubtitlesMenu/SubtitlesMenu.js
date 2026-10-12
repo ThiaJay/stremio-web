@@ -32,6 +32,26 @@ const sortByValues = (items, values) => items.sort((a, b) => {
     return left - right;
 });
 
+const enhancedSubtitleStatusText = (status, picture) => {
+    if (picture === 'suspected') return t('ENHANCED_SUBTITLE_SOURCE_HINT', {
+        defaultValue: 'The source name suggests subtitles may already be in the picture. This has not been verified.'
+    });
+    switch (status) {
+        case 'audio_understood':
+            return t('ENHANCED_SUBTITLE_AUDIO_UNDERSTOOD', { defaultValue: 'Audio language understood. Subtitles are off.' });
+        case 'audio_language_unknown':
+            return t('ENHANCED_SUBTITLE_AUDIO_UNKNOWN', { defaultValue: 'Audio language is unknown. Subtitles are off until selected manually.' });
+        case 'no_matching_subtitle_track':
+            return t('ENHANCED_SUBTITLE_NO_TRACK', { defaultValue: 'No suitable preferred subtitle track was found.' });
+        case 'manual_selection':
+            return t('ENHANCED_SUBTITLE_MANUAL', { defaultValue: 'Manual subtitle choice is in control.' });
+        case 'picture_subtitles_confirmed':
+            return t('ENHANCED_SUBTITLE_PICTURE_CONFIRMED', { defaultValue: 'Picture subtitles confirmed. Automatic overlays are off.' });
+        default:
+            return null;
+    }
+};
+
 const SubtitlesMenu = React.memo(React.forwardRef((props, ref) => {
     const subtitlesTracks = React.useMemo(() => {
         return normalizeTracksLang(Array.isArray(props.subtitlesTracks) ? props.subtitlesTracks : []);
@@ -158,6 +178,24 @@ const SubtitlesMenu = React.memo(React.forwardRef((props, ref) => {
     return (
         <div ref={ref} className={classnames(props.className, styles['subtitles-menu-container'])} onMouseDown={onMouseDown}>
             <div className={styles['languages-container']}>
+                {props.enhancedSubtitleStatus &&
+                    <div className={styles['no-variants-label']} role={'status'} aria-live={'polite'}>
+                        {enhancedSubtitleStatusText(props.enhancedSubtitleStatus, props.enhancedPictureEvidence)}
+                    </div>
+                }
+                {props.enhancedSubtitleStatus &&
+                    <div className={styles['languages-list']}>
+                        <Button title={t('ENHANCED_SUBTITLE_PICTURE_READABLE', { defaultValue: 'Picture subtitles are readable' })} onClick={() => props.onEnhancedPictureChoiceChanged?.('confirmed')}>
+                            <div className={styles['language-label']}>{t('ENHANCED_SUBTITLE_PICTURE_READABLE', { defaultValue: 'Picture subtitles are readable' })}</div>
+                        </Button>
+                        <Button title={t('ENHANCED_SUBTITLE_PICTURE_NOT_READABLE', { defaultValue: 'No readable picture subtitles' })} onClick={() => props.onEnhancedPictureChoiceChanged?.('notPresent')}>
+                            <div className={styles['language-label']}>{t('ENHANCED_SUBTITLE_PICTURE_NOT_READABLE', { defaultValue: 'No readable picture subtitles' })}</div>
+                        </Button>
+                        <Button title={t('ENHANCED_SUBTITLE_PICTURE_RESET', { defaultValue: 'Reset picture subtitle assessment' })} onClick={() => props.onEnhancedPictureChoiceChanged?.('unknown')}>
+                            <div className={styles['language-label']}>{t('ENHANCED_SUBTITLE_PICTURE_RESET', { defaultValue: 'Reset picture subtitle assessment' })}</div>
+                        </Button>
+                    </div>
+                }
                 <div className={styles['languages-header']}>{ t('PLAYER_SUBTITLES_LANGUAGES') }</div>
                 <div className={styles['languages-list']}>
                     <Button title={t('OFF')} className={classnames(styles['language-option'], { 'selected': selectedSubtitlesLanguage === null })} onClick={subtitlesLanguageOnClick}>
@@ -280,6 +318,10 @@ SubtitlesMenu.propTypes = {
     extraSubtitlesDelay: PropTypes.number,
     extraSubtitlesSize: PropTypes.number,
     assSubtitlesStylingActive: PropTypes.bool,
+    enhancedSubtitleStatus: PropTypes.string,
+    enhancedPictureEvidence: PropTypes.string,
+    enhancedPictureChoice: PropTypes.string,
+    onEnhancedPictureChoiceChanged: PropTypes.func,
     onSubtitlesTrackSelected: PropTypes.func,
     onExtraSubtitlesTrackSelected: PropTypes.func,
     onSubtitlesOffsetChanged: PropTypes.func,

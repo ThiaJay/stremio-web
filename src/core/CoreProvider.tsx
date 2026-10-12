@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import CoreContext from './CoreContext';
 import createTransport from './createTransport';
 import Error from './Error';
@@ -11,6 +12,7 @@ type Props = {
 };
 
 const Core = (props: Props) => {
+    const { t } = useTranslation();
     const initialized = useRef(false);
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<Error | null>();
@@ -89,6 +91,11 @@ const Core = (props: Props) => {
 
     return (
         <CoreContext.Provider value={{ transport, on, off }}>
+            { !ready && !error &&
+                <main role={'status'} aria-live={'polite'} data-enhanced-core-state={'pending'}>
+                    {t('ENHANCED_CORE_WAITING', { defaultValue: 'Starting Stremio Enhanced. Waiting for the playback engine.' })}
+                </main>
+            }
             { error && !ready && <Error message={error.message} /> }
             { ready && !error && props.children }
         </CoreContext.Provider>
