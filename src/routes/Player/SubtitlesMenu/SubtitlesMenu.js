@@ -161,25 +161,25 @@ const SubtitlesMenu = React.memo(React.forwardRef((props, ref) => {
                 {props.enhancedSubtitleStatus &&
                     <div className={styles['no-variants-label']} role={'status'} aria-live={'polite'}>
                         {props.enhancedPictureEvidence === 'suspected' ?
-                            'The source name suggests subtitles may already be in the picture. This has not been verified.' :
-                            props.enhancedSubtitleStatus === 'audio_understood' ? 'Audio language understood. Subtitles are off.' :
-                            props.enhancedSubtitleStatus === 'audio_language_unknown' ? 'Audio language is unknown. Subtitles are off until selected manually.' :
-                            props.enhancedSubtitleStatus === 'no_matching_subtitle_track' ? 'No suitable preferred subtitle track was found.' :
-                            props.enhancedSubtitleStatus === 'manual_selection' ? 'Manual subtitle choice is in control.' :
-                            props.enhancedSubtitleStatus === 'picture_subtitles_confirmed' ? 'Picture subtitles confirmed. Automatic overlays are off.' :
+                            t('ENHANCED_SUBTITLE_SOURCE_HINT', { defaultValue: 'The source name suggests subtitles may already be in the picture. This has not been verified.' }) :
+                            props.enhancedSubtitleStatus === 'audio_understood' ? t('ENHANCED_SUBTITLE_AUDIO_UNDERSTOOD', { defaultValue: 'Audio language understood. Subtitles are off.' }) :
+                            props.enhancedSubtitleStatus === 'audio_language_unknown' ? t('ENHANCED_SUBTITLE_AUDIO_UNKNOWN', { defaultValue: 'Audio language is unknown. Subtitles are off until selected manually.' }) :
+                            props.enhancedSubtitleStatus === 'no_matching_subtitle_track' ? t('ENHANCED_SUBTITLE_NO_TRACK', { defaultValue: 'No suitable preferred subtitle track was found.' }) :
+                            props.enhancedSubtitleStatus === 'manual_selection' ? t('ENHANCED_SUBTITLE_MANUAL', { defaultValue: 'Manual subtitle choice is in control.' }) :
+                            props.enhancedSubtitleStatus === 'picture_subtitles_confirmed' ? t('ENHANCED_SUBTITLE_PICTURE_CONFIRMED', { defaultValue: 'Picture subtitles confirmed. Automatic overlays are off.' }) :
                             null}
                     </div>
                 }
                 {props.enhancedSubtitleStatus &&
                     <div className={styles['languages-list']}>
-                        <Button title={'Picture subtitles are readable'} onClick={() => props.onEnhancedPictureChoiceChanged?.('confirmed')}>
-                            <div className={styles['language-label']}>Picture subtitles are readable</div>
+                        <Button title={t('ENHANCED_SUBTITLE_PICTURE_READABLE', { defaultValue: 'Picture subtitles are readable' })} onClick={() => props.onEnhancedPictureChoiceChanged?.('confirmed')}>
+                            <div className={styles['language-label']}>{t('ENHANCED_SUBTITLE_PICTURE_READABLE', { defaultValue: 'Picture subtitles are readable' })}</div>
                         </Button>
-                        <Button title={'No readable picture subtitles'} onClick={() => props.onEnhancedPictureChoiceChanged?.('notPresent')}>
-                            <div className={styles['language-label']}>No readable picture subtitles</div>
+                        <Button title={t('ENHANCED_SUBTITLE_PICTURE_NOT_READABLE', { defaultValue: 'No readable picture subtitles' })} onClick={() => props.onEnhancedPictureChoiceChanged?.('notPresent')}>
+                            <div className={styles['language-label']}>{t('ENHANCED_SUBTITLE_PICTURE_NOT_READABLE', { defaultValue: 'No readable picture subtitles' })}</div>
                         </Button>
-                        <Button title={'Reset picture subtitle assessment'} onClick={() => props.onEnhancedPictureChoiceChanged?.('unknown')}>
-                            <div className={styles['language-label']}>Reset picture subtitle assessment</div>
+                        <Button title={t('ENHANCED_SUBTITLE_PICTURE_RESET', { defaultValue: 'Reset picture subtitle assessment' })} onClick={() => props.onEnhancedPictureChoiceChanged?.('unknown')}>
+                            <div className={styles['language-label']}>{t('ENHANCED_SUBTITLE_PICTURE_RESET', { defaultValue: 'Reset picture subtitle assessment' })}</div>
                         </Button>
                     </div>
                 }
