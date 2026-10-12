@@ -37,7 +37,7 @@ jobs:
           const fs=require('node:fs'), crypto=require('node:crypto');
           const pkg=require('./package.json');
           const provenance=require('./vendor/core-web/provenance.json');
-          const expected='cdf2ba7b0a0a3ffe100c0da810d271e750d72a28';
+          const expected='30af605c40229a84bed7b45f7c29908b32881f66';
           if(pkg.dependencies['@stremio/stremio-video']!==
             'github:ThiaJay/stremio-video#'+expected)throw Error('Video fork drift');
           if(pkg.dependencies['@stremio/stremio-core-web']!==
