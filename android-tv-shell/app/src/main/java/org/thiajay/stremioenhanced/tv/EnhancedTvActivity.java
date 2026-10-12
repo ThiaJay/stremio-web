@@ -132,13 +132,34 @@ public final class EnhancedTvActivity extends Activity {
             }
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (NavigationPolicy.isInternalNavigation(url)) status.setText(R.string.ready);
+                if (NavigationPolicy.isInternalNavigation(url)) {
+                    status.setText(R.string.ready);
+                    if (BuildConfig.DEBUG) probeDebugWebMount(view, 16);
+                }
             }
         });
         root.addView(webView, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         status.setText(R.string.start);
         safeLoadHome();
+    }
+
+    // Bounded boolean-only local emulator diagnostic; never records a URL,
+    // cookie, programme title, account key, video frame or any user content.
+    private void probeDebugWebMount(WebView view, int attemptsRemaining) {
+        if (!BuildConfig.DEBUG || attemptsRemaining <= 0 || view != webView) return;
+        view.postDelayed(() -> {
+            if (view != webView) return;
+            view.evaluateJavascript(
+                "Boolean(document.getElementById('app')?.children.length > 0)",
+                value -> {
+                    if ("true".equals(value)) {
+                        android.util.Log.i("EnhancedTvSmoke", "ANONYMOUS_WEB_REACT_VISIBLE");
+                    } else {
+                        probeDebugWebMount(view, attemptsRemaining - 1);
+                    }
+                });
+        }, 500);
     }
 
     private static WebResourceResponse forbiddenResponse() {
