@@ -7,6 +7,7 @@ on:
     paths:
       - 'android-tv-shell/tests/emulator_smoke.sh'
       - 'android-tv-shell/app/src/main/java/org/thiajay/stremioenhanced/tv/EnhancedTvActivity.java'
+      - 'android-tv-shell/app/build.gradle'
       - '.github/workflows/enhanced-tv-emulator-validation.yml'
   workflow_dispatch:
 
