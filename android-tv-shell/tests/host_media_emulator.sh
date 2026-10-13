@@ -129,6 +129,11 @@ for count in (1, 2, 3):
     if f'OK ({count} tests)' in s or f'OK ({count} test)' in s:
         print(f'HOSTQA_INSTRUMENTATION_OK_COUNT_{count}')
 for phrase, marker in (
+    ('QA start control lost focus', 'QA_HTML_FOCUS'),
+    ('QA remote focus unavailable on retry', 'QA_HTML_RETRY_FOCUS'),
+    ('Original Enhanced React application not mounted', 'REACT_MOUNT'),
+    ('Core route JavaScript callback timed out', 'JS_CALLBACK'),
+    ('Real Core route WebView', 'WEBVIEW'),
     ('Core route preflight failed', 'CORE_PREFLIGHT'),
     ('Anonymous Core cannot encode', 'CORE_NOT_READY'),
     ('Real D-pad did not initiate', 'REMOTE_START'),
@@ -151,6 +156,42 @@ for code in ('core-unavailable','core-state-unavailable','not-anonymous',
              'frame-api-unavailable'):
     if code in s:
         print('HOSTQA_CORE_REASON_' + code.replace('-', '_').upper())
+# Print only fixed test identifiers and framework status codes. No log lines,
+# stack traces, URLs, account data or environment details can escape this gate.
+import re
+for name in ('fullAnonymousCorePlayerRouteAcceptsOriginalMedia',
+             'pinnedStremioVideoBackendPlaysOriginalMediaWithNightAudio',
+             'originalVideoAndPcmDecodeInsideActualEnhancedHost'):
+    if 'test=' + name in s:
+        print('HOSTQA_TEST_EXECUTED_' + name)
+for code in re.findall(r'(?m)^INSTRUMENTATION_STATUS_CODE:\s*(-?\d+)\s*
+PY
+  echo 'HOSTQA_FAIL_ONE_OR_MORE_INSTRUMENTATION_ACCEPTANCE_TESTS'
+  exit 1
+fi
+# A passing test is not a passing workflow until the emulator has exited.
+cleanup
+echo 'HOSTQA_ACTUAL_ENHANCED_HOST_H264_AAC_AND_PCM_PASS'
+echo 'HOSTQA_ORIGINAL_EMULATOR_FIXTURE_NO_ACCOUNT_NO_DEVICE_NO_RELEASE'
+, s):
+    if code in ('-2','-1','0','1'):
+        print('HOSTQA_FRAMEWORK_STATUS_CODE_' + code.replace('-','NEG'))
+for code in re.findall(r'(?m)^INSTRUMENTATION_CODE:\s*(-?\d+)\s*
+PY
+  echo 'HOSTQA_FAIL_ONE_OR_MORE_INSTRUMENTATION_ACCEPTANCE_TESTS'
+  exit 1
+fi
+# A passing test is not a passing workflow until the emulator has exited.
+cleanup
+echo 'HOSTQA_ACTUAL_ENHANCED_HOST_H264_AAC_AND_PCM_PASS'
+echo 'HOSTQA_ORIGINAL_EMULATOR_FIXTURE_NO_ACCOUNT_NO_DEVICE_NO_RELEASE'
+, s):
+    if code in ('-2','-1','0','1'):
+        print('HOSTQA_FRAMEWORK_COMPLETION_CODE_' + code.replace('-','NEG'))
+if 'FAILURES!!!' in s:
+    print('HOSTQA_JUNIT_FAILURE_SUMMARY_PRESENT')
+if 'java.lang.AssertionError' in s:
+    print('HOSTQA_ASSERTION_ERROR_PRESENT')
 print('HOSTQA_INSTRUMENTATION_FAILURE_DIAGNOSTIC_END')
 PY
   echo 'HOSTQA_FAIL_ONE_OR_MORE_INSTRUMENTATION_ACCEPTANCE_TESTS'
