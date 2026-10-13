@@ -77,6 +77,7 @@ cleanup() {
   fi
   wait "$emulator_pid" >/dev/null 2>&1 || true
   rm -f /tmp/enhanced-hostqa-instrumentation-private.txt
+  rm -f /tmp/enhanced-subtitleqa-stage-private.txt
   rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
   if kill -0 "$emulator_pid" 2>/dev/null; then
     echo "HOSTQA_FAIL_EMULATOR_TEARDOWN"
@@ -104,17 +105,32 @@ adb install -r "$apk" >/dev/null
 adb install -r "$test_apk" >/dev/null
 result_file='/tmp/enhanced-hostqa-instrumentation-private.txt'
 rm -f "$result_file"
+# AndroidJUnitRunner -w may omit per-test STATUS entries. Diagnose its JUnit
+# summary and fixed custom QA stages without printing raw Android logs.
+report_subtitle_failure() {
+  python3 android-tv-shell/tests/report_subtitle_qa.py "$result_file" ||
+    echo 'HOSTQA_TEST_RESULT_PARSER_UNAVAILABLE'
+  local stage_file='/tmp/enhanced-subtitleqa-stage-private.txt'
+  rm -f "$stage_file"
+  if timeout 10s adb logcat -d -s EnhancedSubtitleQA:I '*:S' > "$stage_file" 2>/dev/null; then
+    python3 android-tv-shell/tests/report_subtitle_qa.py --stages "$stage_file" ||
+      echo 'HOSTQA_SUBTITLE_STAGE_PARSER_UNAVAILABLE'
+  else
+    echo 'HOSTQA_SUBTITLE_STAGE_CAPTURE_UNAVAILABLE'
+  fi
+  rm -f "$stage_file"
+}
 if ! timeout 330 adb shell am instrument -w \
   -e class org.thiajay.stremioenhanced.tv.EnhancedHostMediaInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedEngineInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedSubtitleInstrumentedTest \
   org.thiajay.stremioenhanced.tv.test/androidx.test.runner.AndroidJUnitRunner \
   >"$result_file" 2>&1; then
-  python3 android-tv-shell/tests/report_subtitle_qa.py "$result_file"
+  report_subtitle_failure
   echo 'HOSTQA_FAIL_INSTRUMENTATION_RUNTIME'
   exit 1
 fi
 if ! grep -Eq 'OK \(3 tests\)' "$result_file" || \
    grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|shortMsg=Process crashed' "$result_file"; then
-  python3 android-tv-shell/tests/report_subtitle_qa.py "$result_file"
+  report_subtitle_failure
   echo 'HOSTQA_FAIL_MEDIA_DECODE_OR_PCM_NOT_ACCEPTED'
   exit 1
 fi

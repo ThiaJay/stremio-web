@@ -45,6 +45,17 @@ jobs:
           set -euo pipefail
           bash -n android-tv-shell/tests/host_media_emulator.sh
           python3 android-tv-shell/tests/report_subtitle_qa.py --self-test
+          python3 - <<'PY'
+          from pathlib import Path
+          java=Path('android-tv-shell/app/src/androidTest/java/org/thiajay/stremioenhanced/tv/EnhancedSubtitleInstrumentedTest.java').read_text()
+          shell=Path('android-tv-shell/tests/host_media_emulator.sh').read_text()
+          parser=Path('android-tv-shell/tests/report_subtitle_qa.py').read_text()
+          assert 'captureSafeState(instrumentation, observedView.get())' in java
+          assert 'SUBTITLE_QA_FLAG_' in java and 'SUBTITLE_QA_STAGE_' in java
+          assert 'report_subtitle_qa.py --stages' in shell
+          assert 'HOSTQA_JUNIT_FAILURE_UNATTRIBUTED' in parser
+          print('HOSTQA_SUBTITLE_FAILURE_DIAGNOSTIC_CONTRACT_PASS')
+          PY
           python3 -m py_compile android-tv-shell/tests/audit_subtitle_runtime_qa.py
           node --check android-tv-shell/tests/subtitle_runtime_qa.js
           python3 - <<'PY'
