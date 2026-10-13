@@ -94,9 +94,27 @@ public final class EnhancedMeasuredNightAudioInstrumentedTest {
             assertTrue("MEASURED_NIGHT_QA_NO_TRUSTED_REMOTE_GESTURE",
                 waitFor(instrumentation, realView,
                     "window.__enhancedMeasuredNightQa?.gesture===true", 6000));
+            final boolean fullyMeasured = waitFor(instrumentation, realView,
+                "window.__enhancedMeasuredNightQa?.complete===true", 25000);
+            if (!fullyMeasured) {
+                // Nine fixed booleans only. Never log a URL, account,
+                // application content or raw WebView error.
+                String bits = evaluate(instrumentation, realView,
+                    "(()=>{const s=window.__enhancedMeasuredNightQa||{};" +
+                    "return ['ready','gesture','backend','video','requested'," +
+                    "'measured','off','error','complete']" +
+                    ".map(k=>s[k]===true?'1':'0').join('')})()");
+                if (bits != null && bits.matches("\\\"[01]{9}\\\"")) {
+                    android.util.Log.i("MeasuredNightQA",
+                        "MEASURED_NIGHT_QA_FLAGS_" +
+                        bits.substring(1, bits.length() - 1));
+                } else {
+                    android.util.Log.i("MeasuredNightQA",
+                        "MEASURED_NIGHT_QA_FLAGS_UNAVAILABLE");
+                }
+            }
             assertTrue("MEASURED_NIGHT_QA_NO_MEASURED_COMPRESSED_PCM_OR_OFF",
-                waitFor(instrumentation, realView,
-                    "window.__enhancedMeasuredNightQa?.complete===true", 25000));
+                fullyMeasured);
             for (String item : new String[] {"video", "requested", "measured", "off", "complete"}) {
                 assertEquals("MEASURED_NIGHT_QA_REQUIRED_" + item,
                     "true", evaluate(instrumentation, realView,

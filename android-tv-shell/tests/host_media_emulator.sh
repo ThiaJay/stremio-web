@@ -114,6 +114,13 @@ fi
 if ! grep -Eq 'OK \(3 tests\)' "$result_file" || \
    grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|shortMsg=Process crashed' "$result_file"; then
   echo 'HOSTQA_FAIL_MEDIA_DECODE_OR_PCM_NOT_ACCEPTED'
+  # Only the test author's fixed identifiers and nine boolean flags.
+  # The private instrumentation output and unknown screen text stay hidden.
+  grep -Eo 'MEASURED_NIGHT_QA_[A-Z_]+|HOSTQA_[A-Z_]+' "$result_file" \
+    | sort -u | head -18 || true
+  adb logcat -d -s MeasuredNightQA:I '*:S' 2>/dev/null \
+    | grep -Eo 'MEASURED_NIGHT_QA_FLAGS_([01]{9}|UNAVAILABLE)' \
+    | sort -u | head -4 || true
   exit 1
 fi
 # A passing test is not a passing workflow until the emulator has exited.
