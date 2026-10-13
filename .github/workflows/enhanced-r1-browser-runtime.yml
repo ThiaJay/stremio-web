@@ -1,0 +1,129 @@
+name: Stremio Enhanced R1 anonymous real browser acceptance
+
+on:
+  push:
+    branches:
+      - feature/enhanced-tv-subtitle-runtime-qa-20261013-v1
+    paths:
+      - 'tests/enhancedBrowserPlayer.node.mjs'
+      - '.github/workflows/enhanced-r1-browser-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: enhanced-r1-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact Enhanced source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install trusted package manager
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Install pinned Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Verify exact Core Video and browser acceptance scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tests/enhancedBrowserPlayer.node.mjs
+          node <<'JS'
+          const fs=require('node:fs');
+          const crypto=require('node:crypto');
+          const d=require('./package.json').dependencies;
+          const p=require('./vendor/core-web/provenance.json');
+          const s=fs.readFileSync('tests/enhancedBrowserPlayer.node.mjs','utf8');
+          if(d['@stremio/stremio-core-web']!=='file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz')
+              throw Error('Core dependency changed');
+          if(d['@stremio/stremio-video']!=='github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66')
+              throw Error('Exact Video dependency changed');
+          const digest=crypto.createHash('sha256').update(
+              fs.readFileSync('vendor/core-web/'+p.tarballName)).digest('hex');
+          if(p.coreSourceSha!=='303d7c0bb8bd6d55f11f2f751e55e66040da4f8c'||digest!==p.sha256)
+              throw Error('Core source provenance unverified');
+          for(const token of ['Fetch.failRequest','ctx?.profile?.auth===null',
+              'requestVideoFrameCallback','e.isTrusted','core.encodeStream',
+              'core.decodeStream','CORE_PLAYER_STATE_NOT_SELECTED',
+              'releaseEligible:false','qa-original.mp4'])
+              if(!s.includes(token))throw Error('R1 privacy or acceptance contract missing');
+          for(const forbidden of ['video.play()', 'button.click()', 'navigator.sendBeacon',
+              'document.cookie','localStorage.setItem','sessionStorage.setItem',
+              '--autoplay-policy=no-user-gesture-required'])
+              if(s.includes(forbidden))throw Error('R1 browser test may bypass real controls or alter account');
+          console.log('ENHANCED_R1_EXACT_PIN_AND_PRIVACY_SOURCE_GATE_PASS');
+          JS
+      - name: Install exactly locked source packages without install hooks
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Preserve existing Enhanced and Web regressions
+        run: |
+          node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
+          pnpm exec jest --runInBand
+          pnpm exec eslint src --max-warnings 287
+      - name: Scan production dependency advisories
+        run: pnpm audit --prod --audit-level moderate
+      - name: Build actual complete React Core Video Web client
+        run: pnpm exec webpack --mode production
+      - name: Preserve existing real Chromium anonymous shell gate
+        run: node tests/enhancedBrowserSmoke.node.mjs
+      - name: Generate original offline H264 AAC media
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          fixture='android-tv-shell/app/src/debug/assets/web/qa-local.mp4'
+          test ! -e "$fixture"
+          mkdir -p "$(dirname "$fixture")"
+          ffmpeg -nostdin -hide_banner -loglevel error \
+            -f lavfi -i 'testsrc2=duration=5:size=320x180:rate=15' \
+            -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=5' \
+            -c:v libx264 -preset ultrafast -threads 2 -pix_fmt yuv420p \
+            -c:a aac -b:a 96k -movflags +faststart -shortest -y "$fixture"
+          ffprobe -v error -of json -show_streams "$fixture" > /tmp/enhanced-r1-ffprobe-private.json
+          python3 - <<'PY'
+          import json,pathlib
+          media=pathlib.Path('android-tv-shell/app/src/debug/assets/web/qa-local.mp4')
+          data=json.loads(pathlib.Path('/tmp/enhanced-r1-ffprobe-private.json').read_text())
+          assert 15000<media.stat().st_size<4000000
+          codecs={(x.get('codec_type'),x.get('codec_name')) for x in data['streams']}
+          assert ('video','h264') in codecs and ('audio','aac') in codecs
+          print('ENHANCED_R1_ORIGINAL_OFFLINE_MEDIA_CODEC_PASS')
+          PY
+      - name: Accept actual anonymous Core Player browser playback without external network
+        id: r1_browser
+        shell: bash
+        run: timeout --signal=TERM --kill-after=10s 190s node tests/enhancedBrowserPlayer.node.mjs
+      - name: Record asynchronous exact-source browser outcome
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Stremio Enhanced R1 anonymous Chromium playback'
+            echo "Source SHA $GITHUB_SHA"
+            echo "Run https://github.com/ThiaJay/stremio-web/actions/runs/$GITHUB_RUN_ID"
+            echo 'R1 browser acceptance ${{ steps.r1_browser.outcome }}'
+            echo 'Held: account, addons, provider playback, hardware, licensing, rollback, distribution.'
+            echo 'Anonymous offline media only. No automatic deployment or account writes.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Clear disposable media
+        if: always()
+        shell: bash
+        run: |
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
+          rm -f /tmp/enhanced-r1-ffprobe-private.json
+# Intentionally no artifact publication, accounts, deployment, signed APK or release.
