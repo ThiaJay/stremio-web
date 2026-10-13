@@ -36,6 +36,7 @@ jobs:
           bash -n android-tv-shell/tests/host_media_emulator.sh
           python3 android-tv-shell/tests/diagnose_core_route.py --self-test
           python3 android-tv-shell/tests/report_core_stages.py --self-test
+          python3 android-tv-shell/tests/audit_remote_lifecycle_qa.py
       - name: Install pnpm
         uses: pnpm/action-setup@v6.1.0
         with:
@@ -59,7 +60,8 @@ jobs:
             'feature/enhanced-tv-webview-20261012-v1': 'github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687',
             'feature/enhanced-tv-htmlvideo-night-audio-20261012-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66',
             'feature/enhanced-tv-original-media-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66',
-            'feature/enhanced-tv-core-route-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
+            'feature/enhanced-tv-core-route-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66',
+            'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
           });
           const candidate = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
           if (!Object.hasOwn(sourceByCandidate, candidate)) throw Error('Unrecognised TV candidate branch');
@@ -126,7 +128,7 @@ jobs:
           sha256sum "$apk"
           echo 'SOURCE_ONLY_PREVIEW_BUILT: NOT INSTALLED, NOT RELEASED, NOT TESTED WITH AN ACCOUNT OR ON TV.'
       - name: Generate temporary original media for the actual Enhanced host
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1'
         shell: bash
         run: |
           set -euo pipefail
@@ -156,14 +158,14 @@ jobs:
           print('HOSTQA_ORIGINAL_MEDIA_CODEC_AND_DURATION_PASS')
           PY
       - name: Bundle exact pinned StremioVideo backend for test-only instrumentation
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1'
         shell: bash
         run: |
           set -euo pipefail
           pnpm exec webpack --config android-tv-shell/tests/video_qa.webpack.config.cjs --mode production --stats errors-only
           python3 android-tv-shell/tests/audit_real_engine_qa.py
       - name: Verify anonymous Core player route fixture is debug-only
-        if: github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1'
         shell: bash
         run: |
           set -euo pipefail
@@ -175,10 +177,10 @@ jobs:
           cp "$src" "$dst"
           python3 android-tv-shell/tests/audit_core_route_qa.py
       - name: Assemble separate actual-host instrumentation test APK
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1'
         run: gradle -p android-tv-shell :app:assembleDebug :app:assembleAndroidTest --no-daemon --stacktrace
       - name: Enable runner KVM for temporary television emulator
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1'
         shell: bash
         run: |
           set -euo pipefail
@@ -189,7 +191,7 @@ jobs:
           fi
           test -r /dev/kvm && test -w /dev/kvm || exit 2
       - name: Exercise original media in the real Enhanced TV WebView
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-remote-lifecycle-qa-20261013-v1'
         id: android_emulator_acceptance
         shell: bash
         run: timeout --signal=TERM --kill-after=10s 540s bash android-tv-shell/tests/host_media_emulator.sh
