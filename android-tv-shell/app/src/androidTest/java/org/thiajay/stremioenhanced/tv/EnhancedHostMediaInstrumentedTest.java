@@ -9,6 +9,7 @@ import android.view.ViewGroup;
 import android.webkit.WebView;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
@@ -86,7 +87,15 @@ public final class EnhancedHostMediaInstrumentedTest {
             byte[] bytes;
             try (InputStream input = instrumentation.getContext().getAssets()
                     .open("host_media.js")) {
-                bytes = input.readAllBytes();
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                byte[] chunk = new byte[4096];
+                int count;
+                while ((count = input.read(chunk)) >= 0) {
+                    assertTrue("Instrumentation source unexpectedly large",
+                               output.size() + count < 16000);
+                    output.write(chunk, 0, count);
+                }
+                bytes = output.toByteArray();
             }
             assertTrue("Instrumentation fixture absent or oversized",
                        bytes.length > 1500 && bytes.length < 16000);
