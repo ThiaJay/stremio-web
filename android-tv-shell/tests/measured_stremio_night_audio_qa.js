@@ -11,7 +11,9 @@ const StremioVideo = require('@stremio/stremio-video');
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     const state = {
         ready: false, gesture: false, backend: false, video: false,
-        requested: false, measured: false, off: false, complete: false, error: false
+        requested: false, measured: false, off: false, complete: false, error: false,
+        sourceCaptured: false, tapsConnected: false, contextRunning: false,
+        inputDetected: false, outputDetected: false, attenuationDetected: false
     };
     Object.defineProperty(window, '__enhancedMeasuredNightQa', { value: state });
     if (!AudioCtor) { state.error = true; return; }
@@ -55,6 +57,7 @@ const StremioVideo = require('@stremio/stremio-video');
             }
             instrumented.context = this;
             instrumented.source = source;
+            state.sourceCaptured = true;
             instrumented.compressor = this.__measuredCompressor;
             if (!instrumented.compressor) { state.error = true; return source; }
 
@@ -166,14 +169,20 @@ const StremioVideo = require('@stremio/stremio-video');
             if (video.currentTime > 1.3 && frames >= 6 &&
                     video.videoWidth >= 100 && !video.paused) state.video = true;
 
+            state.tapsConnected = !!(instrumented.before && instrumented.after);
+            state.contextRunning = instrumented.context?.state === 'running';
             if (state.requested && !state.measured &&
-                    instrumented.context?.state === 'running' &&
-                    instrumented.before && instrumented.after) {
+                    state.contextRunning && state.tapsConnected) {
                 instrumented.before.getFloatTimeDomainData(input);
                 instrumented.after.getFloatTimeDomainData(output);
                 const before = rms(input), after = rms(output);
+                if (before > 0.05) state.inputDetected = true;
+                if (after > 0.01) state.outputDetected = true;
                 if (before > 0.05 && after > 0.01 &&
-                        after < before * 0.78) goodWindows++;
+                        after < before * 0.78) {
+                    state.attenuationDetected = true;
+                    goodWindows++;
+                }
                 if (goodWindows >= 5 && video.currentTime > 0.65) {
                     state.measured = true;
                 }

@@ -97,14 +97,16 @@ public final class EnhancedMeasuredNightAudioInstrumentedTest {
             final boolean fullyMeasured = waitFor(instrumentation, realView,
                 "window.__enhancedMeasuredNightQa?.complete===true", 25000);
             if (!fullyMeasured) {
-                // Nine fixed booleans only. Never log a URL, account,
+                // Fifteen fixed booleans only. Never log a URL, account,
                 // application content or raw WebView error.
                 String bits = evaluate(instrumentation, realView,
                     "(()=>{const s=window.__enhancedMeasuredNightQa||{};" +
                     "return ['ready','gesture','backend','video','requested'," +
-                    "'measured','off','error','complete']" +
+                    "'measured','off','error','complete','sourceCaptured'," +
+                    "'tapsConnected','contextRunning','inputDetected'," +
+                    "'outputDetected','attenuationDetected']" +
                     ".map(k=>s[k]===true?'1':'0').join('')})()");
-                if (bits != null && bits.matches("\\\"[01]{9}\\\"")) {
+                if (bits != null && bits.matches("\\\"[01]{15}\\\"")) {
                     android.util.Log.i("MeasuredNightQA",
                         "MEASURED_NIGHT_QA_FLAGS_" +
                         bits.substring(1, bits.length() - 1));
