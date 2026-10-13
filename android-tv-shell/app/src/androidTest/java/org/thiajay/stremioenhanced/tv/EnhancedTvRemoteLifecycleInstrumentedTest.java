@@ -39,7 +39,8 @@ public final class EnhancedTvRemoteLifecycleInstrumentedTest {
     private static Button nativeButton(View view, String label) {
         if(view instanceof Button) {
             Button button=(Button)view;
-            if(label.contentEquals(button.getContentDescription()))return button;
+            CharSequence description=button.getContentDescription();
+            if(description!=null&&label.contentEquals(description))return button;
         }
         if(view instanceof ViewGroup) {
             ViewGroup parent=(ViewGroup)view;
