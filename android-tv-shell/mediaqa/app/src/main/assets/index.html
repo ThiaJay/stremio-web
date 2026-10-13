@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Original Media QA</title>
+<style>
+body { margin: 0; background: #17212a; color: white; font-family: sans-serif; }
+main { padding: 2rem; }
+button { padding: 1rem; font-size: 1.4rem; }
+button:focus { outline: 5px solid #61cfc9; }
+video { width: 640px; max-width: 95%; display: block; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>Original media test only</h1>
+<p>Locally generated media, no Stremio account or external stream.</p>
+<button id="start" disabled>Start local test</button>
+<video id="video" playsinline preload="metadata"></video>
+</main>
+<script>
+'use strict';
+(() => {
+    const video = document.getElementById('video');
+    const button = document.getElementById('start');
+    const emit = code => console.info(code);
+    let ready = false, started = false;
+    let videoPassed = false, audioPassed = false;
+    let frames = 0, objectURL = null;
+
+    async function prepare() {
+        const response = await fetch('./sample.mp4',
+            {cache: 'no-store', redirect: 'error'});
+        if (!response.ok) throw new Error('Missing local original fixture');
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength < 15000 || bytes.byteLength > 4000000)
+            throw new Error('Invalid original fixture size');
+        objectURL = URL.createObjectURL(new Blob([bytes], {type: 'video/mp4'}));
+        if (new URL(objectURL).origin !== location.origin)
+            throw new Error('Local blob origin mismatch');
+        video.src = objectURL;
+        video.load();
+        await new Promise((resolve, reject) => {
+            if (video.readyState >= HTMLMediaElement.HAVE_METADATA)
+                return void resolve();
+            video.addEventListener('loadedmetadata', resolve, {once: true});
+            video.addEventListener('error',
+                () => reject(new Error('Metadata not decoded')), {once: true});
+            setTimeout(() => reject(new Error('Metadata timed out')), 15000);
+        });
+        if (video.videoWidth < 100 || video.videoHeight < 60 ||
+            video.duration < 3 || video.duration > 8)
+            throw new Error('Unexpected decoded video metadata');
+        ready = true;
+        button.disabled = false;
+        button.focus();
+        emit('MEDIAQA_READY_FOR_USER_GESTURE');
+    }
+
+    function rms(samples) {
+        let sum = 0;
+        for (let i = 0; i < samples.length; i++)
+            sum += samples[i] * samples[i];
+        return Math.sqrt(sum / samples.length);
+    }
+
+    function start() {
+        if (!ready || started) return;
+        started = true;
+        button.disabled = true;
+        emit('MEDIAQA_GESTURE_ACCEPTED');
+        if (typeof video.requestVideoFrameCallback === 'function') {
+            const onFrame = (_time, metadata) => {
+                frames = Math.max(frames, metadata.presentedFrames || 0);
+                if (!video.ended) video.requestVideoFrameCallback(onFrame);
+            };
+            video.requestVideoFrameCallback(onFrame);
+        } else emit('MEDIAQA_VIDEO_FRAME_CALLBACK_UNAVAILABLE');
+
+        let context = null, before = null, after = null;
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) emit('MEDIAQA_AUDIO_API_UNAVAILABLE');
+        else {
+            try {
+                context = new AudioCtor();
+                const source = context.createMediaElementSource(video);
+                before = context.createAnalyser();
+                after = context.createAnalyser();
+                before.fftSize = 1024;
+                after.fftSize = 1024;
+                const compressor = context.createDynamicsCompressor();
+                compressor.threshold.value = -54;
+                compressor.knee.value = 0;
+                compressor.ratio.value = 18;
+                compressor.attack.value = 0.002;
+                compressor.release.value = 0.08;
+                source.connect(before);
+                before.connect(compressor);
+                compressor.connect(after);
+                after.connect(context.destination);
+                context.resume().catch(() => emit('MEDIAQA_AUDIO_GRAPH_INITIALISATION_FAILED'));
+            } catch (_error) {
+                emit('MEDIAQA_AUDIO_GRAPH_INITIALISATION_FAILED');
+                context = null;
+            }
+        }
+
+        video.play().catch(() => emit('MEDIAQA_USER_GESTURE_PLAYBACK_FAILED'));
+        const input = new Float32Array(1024);
+        const output = new Float32Array(1024);
+        let compressedWindows = 0;
+        const deadline = Date.now() + 14000;
+        function poll() {
+            if (!videoPassed && video.currentTime > 1.4 &&
+                frames >= 6 && video.videoWidth >= 100) {
+                videoPassed = true;
+                emit('MEDIAQA_VIDEO_DECODED_FRAMES_AND_TIME_PASS');
+            }
+            if (!audioPassed && context && before && after &&
+                context.state === 'running') {
+                before.getFloatTimeDomainData(input);
+                after.getFloatTimeDomainData(output);
+                const unprocessed = rms(input);
+                const processed = rms(output);
+                if (unprocessed > 0.008 && processed > 0.0008 &&
+                    processed < unprocessed * 0.86)
+                    compressedWindows++;
+                if (compressedWindows >= 4 && video.currentTime > 0.6) {
+                    audioPassed = true;
+                    emit('MEDIAQA_DECODED_AUDIO_PCM_COMPRESSION_PASS');
+                }
+            }
+            if (videoPassed && audioPassed) return;
+            if (Date.now() < deadline) setTimeout(poll, 120);
+            else {
+                if (!videoPassed) emit('MEDIAQA_VIDEO_DECODE_NOT_OBSERVED');
+                if (!audioPassed) emit('MEDIAQA_AUDIO_PCM_NOT_OBSERVED');
+            }
+        }
+        setTimeout(poll, 200);
+    }
+
+    button.addEventListener('click', start);
+    video.addEventListener('error', () => emit('MEDIAQA_MEDIA_ELEMENT_ERROR'));
+    window.addEventListener('pagehide', () => {
+        if (objectURL) URL.revokeObjectURL(objectURL);
+    });
+    prepare().catch(() => emit('MEDIAQA_LOCAL_FIXTURE_NOT_READY'));
+})();
+</script>
+</body>
+</html>

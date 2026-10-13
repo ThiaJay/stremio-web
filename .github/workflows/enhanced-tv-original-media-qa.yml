@@ -1,0 +1,85 @@
+name: Original media Android WebView decoding QA (separate emulator app)
+
+on:
+  push:
+    branches:
+      - feature/enhanced-tv-original-media-qa-20261013-v1
+    paths:
+      - 'android-tv-shell/mediaqa/**'
+      - '.github/workflows/enhanced-tv-original-media-qa.yml'
+  pull_request:
+    paths:
+      - 'android-tv-shell/mediaqa/**'
+      - '.github/workflows/enhanced-tv-original-media-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: original-mediaqa-isolated
+  cancel-in-progress: true
+
+jobs:
+  original-media-webview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source only without credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify disposable runner virtualisation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo 'MEDIAQA_BLOCKED_NO_KVM'; exit 2; }
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            sudo chgrp "$(id -gn)" /dev/kvm
+            sudo chmod g+rw /dev/kvm
+          fi
+          test -r /dev/kvm && test -w /dev/kvm || {
+            echo 'MEDIAQA_BLOCKED_KVM_PERMISSION'; exit 2;
+          }
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Install Android platform and build tools
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;35.0.0' >/dev/null
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Generate original video and audio entirely within runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ffmpeg
+          command -v ffprobe
+          file='android-tv-shell/mediaqa/app/src/main/assets/sample.mp4'
+          if git ls-files --error-unmatch "$file" >/dev/null 2>&1; then
+            echo 'MEDIAQA_SOURCE_POLICY_FAIL_COMMITTED_MEDIA_BINARY'
+            exit 1
+          fi
+          ffmpeg -nostdin -hide_banner -loglevel error \
+            -f lavfi -i 'testsrc2=duration=5:size=320x180:rate=15' \
+            -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=5' \
+            -c:v libx264 -preset ultrafast -threads 2 -pix_fmt yuv420p \
+            -c:a aac -b:a 96k -movflags +faststart -shortest -y "$file"
+          python3 android-tv-shell/mediaqa/tests/audit.py
+          sha256sum "$file"
+      - name: Assemble entirely separate disposable Android media probe
+        run: gradle -p android-tv-shell/mediaqa :app:lintDebug :app:assembleDebug --no-daemon --stacktrace
+      - name: Require actual decoded original media and Web Audio PCM
+        shell: bash
+        run: bash android-tv-shell/mediaqa/tests/run_emulator.sh
+
+# QA package only. Do not upload an APK or fixture, sign, deploy, authenticate,
+# install to a user device, use third-party media or change Stremio accounts.
