@@ -44,6 +44,22 @@ jobs:
         run: |
           set -euo pipefail
           bash -n android-tv-shell/tests/host_media_emulator.sh
+          python3 android-tv-shell/tests/classify_emulator_adb.py --self-test
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('android-tv-shell/tests/host_media_emulator.sh').read_text()
+          for token in (
+              'HOSTQA_BLOCKED_ADB_UNAUTHORIZED',
+              'HOSTQA_BLOCKED_UNEXPECTED_ADB_DEVICE',
+              'HOSTQA_ADB_HOST_RECONNECT_ONCE',
+              'HOSTQA_BLOCKED_BOOT_TIMEOUT',
+              'adb -s "$serial" install -r',
+              'OK \\(3 tests\\)'
+          ):
+              assert token in source,token
+          assert 'GITHUB_ACTIONS' in source and 'classify_emulator_adb.py' in source
+          print('HOSTQA_ADB_AUTHORISATION_FAIL_CLOSED_CONTRACT_PASS')
+          PY
           python3 android-tv-shell/tests/report_subtitle_qa.py --self-test
           python3 - <<'PY'
           from pathlib import Path
