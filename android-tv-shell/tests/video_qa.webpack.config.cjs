@@ -4,7 +4,7 @@ const webpack = require('webpack');
 module.exports = {
     mode: 'production',
     target: 'web',
-    devtool: false,
+    devtool:false,
     entry: {
         'qa-video-engine':path.resolve(__dirname,'real_stremio_backend_qa.js'),
         'qa-subtitles':path.resolve(__dirname,'subtitle_runtime_qa.js'),

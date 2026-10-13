@@ -47,6 +47,16 @@ jobs:
           python3 android-tv-shell/tests/report_subtitle_qa.py --self-test
           python3 -m py_compile android-tv-shell/tests/audit_subtitle_runtime_qa.py
           node --check android-tv-shell/tests/subtitle_runtime_qa.js
+          python3 - <<'PY'
+          from pathlib import Path
+          configuration=Path('android-tv-shell/tests/video_qa.webpack.config.cjs').read_text()
+          old_audit=Path('android-tv-shell/tests/audit_real_engine_qa.py').read_text()
+          new_audit=Path('android-tv-shell/tests/audit_subtitle_runtime_qa.py').read_text()
+          for token in ('devtool:false','clean:false'):
+              assert token in configuration and token in old_audit, token
+          assert "'devtool:false' in webpack" in new_audit
+          print('HOSTQA_EARLY_SHARED_VIDEO_AUDIT_CONTRACT_PASS')
+          PY
       - name: Check official and customised Core and Video source pinning
         shell: bash
         run: |

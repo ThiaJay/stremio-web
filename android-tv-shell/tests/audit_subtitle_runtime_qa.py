@@ -27,7 +27,7 @@ for forbidden in ('window.core', 'window.localStorage', 'window.sessionStorage',
                   'https://stream', 'https://api.', 'document.cookie',
                   'setMediaPlaybackRequiresUserGesture(false)', 'fetch("http'):
     assert forbidden not in source,forbidden
-assert 'devtool: false' in webpack
+assert 'devtool:false' in webpack
 assert 'qa-subtitles' in webpack and 'qa-video-engine' in webpack
 compiled=tv/'app/src/debug/assets/web/qa-subtitles.js'
 assert compiled.is_file() and 10_000<compiled.stat().st_size<30_000_000
