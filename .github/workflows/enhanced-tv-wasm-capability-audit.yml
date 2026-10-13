@@ -111,3 +111,114 @@ jobs:
           JS
           rm -f "$WASM_PATH"
           echo PINNED_CORE_WASM_STATIC_FEATURE_AUDIT_COMPLETE
+
+
+  stock-api30-webview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact source without retained credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Android SDK and KVM on disposable runner
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Inspect stock Android 11 TV WebView version without installing an application
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo STOCK_API30_HOLD_NO_KVM; exit 2; }
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            sudo chgrp "$(id -gn)" /dev/kvm
+            sudo chmod g+rw /dev/kvm
+          fi
+          test -r /dev/kvm && test -w /dev/kvm
+          sdkmanager --install emulator >/dev/null
+          image="$(sdkmanager --list |
+            grep -Eo 'system-images;android-30;android-tv;(x86|x86_64)' |
+            sort -Vu | tail -1 || true)"
+          [[ -n "$image" ]] || { echo STOCK_API30_HOLD_IMAGE_UNAVAILABLE; exit 2; }
+          sdkmanager --install "$image" >/dev/null
+          if avdmanager list device -c | grep -Fxq tv_1080p; then
+            tv=tv_1080p
+          elif avdmanager list device -c | grep -Fxq tv_720p; then
+            tv=tv_720p
+          else
+            echo STOCK_API30_HOLD_NO_TV_PROFILE; exit 2
+          fi
+          avd_root="$HOME/.android/avd"
+          mkdir -p "$avd_root"
+          avd_dir="$avd_root/stock_api30_probe.avd"
+          if ! printf 'no\n' | avdmanager create avd -n stock_api30_probe \
+            -k "$image" -d "$tv" -p "$avd_dir" --force >/tmp/stock-api30-avd-private.log 2>&1; then
+            echo STOCK_API30_HOLD_AVD_CREATE; exit 2
+          fi
+          if [[ -s "$avd_dir/config.ini" && ! -e "$avd_root/stock_api30_probe.ini" ]]; then
+            abi="$(printf '%s' "$image" | cut -d';' -f4)"
+            if [[ -s "$ANDROID_HOME/system-images/android-30/android-tv/$abi/system.img" ]]; then
+              printf 'avd.ini.encoding=UTF-8\npath=%s\npath.rel=avd/stock_api30_probe.avd\ntarget=android-30\n' \
+                "$avd_dir" >"$avd_root/stock_api30_probe.ini"
+              echo STOCK_API30_EPHEMERAL_AVD_INDEX_REPAIRED
+            fi
+          fi
+          "$ANDROID_HOME/emulator/emulator" -list-avds |
+            grep -Fxq stock_api30_probe || {
+              echo STOCK_API30_HOLD_AVD_UNREGISTERED; exit 2;
+            }
+          "$ANDROID_HOME/emulator/emulator" -avd stock_api30_probe \
+             -no-window -no-audio -no-boot-anim -no-snapshot \
+             -gpu swiftshader_indirect -accel on -wipe-data \
+             >/tmp/stock-api30-emulator-private.log 2>&1 &
+          emulator_pid=$!
+          cleanup() {
+            local old=$?
+            trap - EXIT
+            timeout --kill-after=2s 8s adb emu kill >/dev/null 2>&1 || true
+            if kill -0 "$emulator_pid" 2>/dev/null; then
+              kill -TERM "$emulator_pid" >/dev/null 2>&1 || true
+              for _ in 1 2 3 4 5; do
+                kill -0 "$emulator_pid" 2>/dev/null || break
+                sleep 1
+              done
+              kill -KILL "$emulator_pid" >/dev/null 2>&1 || true
+            fi
+            wait "$emulator_pid" >/dev/null 2>&1 || true
+            echo STOCK_API30_EMULATOR_CLEANED
+            return "$old"
+          }
+          trap cleanup EXIT
+          if ! timeout 210 bash -c 'until
+            adb devices | grep -q "emulator-[0-9]*[[:space:]]*device" &&
+            [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]
+          do sleep 3; done'; then
+            echo STOCK_API30_HOLD_BOOT_TIMEOUT; exit 2
+          fi
+          sdk="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+          [[ "$sdk" == 30 ]] || { echo STOCK_API30_HOLD_WRONG_GUEST_API; exit 2; }
+          adb shell dumpsys webviewupdate |
+            python3 -c '
+          import re,sys
+          raw=sys.stdin.read()
+          m=re.search(r"Current WebView package \(name, version\): \(([^,()]+),\s*(\d+)\.",raw)
+          if not m:
+              print("STOCK_API30_WEBVIEW_UNKNOWN")
+              sys.exit(2)
+          package,major=m.group(1),int(m.group(2))
+          if package not in ("com.android.webview","com.google.android.webview",
+                             "com.android.chrome","com.google.android.apps.chrome"):
+              print("STOCK_API30_WEBVIEW_UNEXPECTED_PROVIDER")
+              sys.exit(2)
+          if 1<=major<96:
+              print("STOCK_API30_CHROMIUM_BELOW_96_REFERENCE_TYPES_GATE")
+          elif 96<=major<112:
+              print("STOCK_API30_CHROMIUM_96_TO_111")
+          elif 112<=major<=200:
+              print("STOCK_API30_CHROMIUM_112_PLUS")
+          else:
+              print("STOCK_API30_WEBVIEW_VERSION_OUT_OF_RANGE")
+              sys.exit(2)
+          '
+          echo STOCK_API30_READ_ONLY_WEBVIEW_VERSION_PROBE_PASS
