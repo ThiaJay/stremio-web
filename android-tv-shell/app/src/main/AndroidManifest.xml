@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Internet is required for the Stremio account, addon and stream protocols.
          This preview does not collect, share or store any account credentials natively. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Media3 libraries may request these, but this foreground-only preview
+         does not need native wake locks or independent network-state access. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" tools:node="remove" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <application

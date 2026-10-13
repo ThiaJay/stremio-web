@@ -3,6 +3,7 @@ package org.thiajay.stremioenhanced.tv;
 import android.app.Activity;
 import android.annotation.SuppressLint;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -18,7 +19,15 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import androidx.annotation.OptIn;
+import androidx.media3.common.util.UnstableApi;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import androidx.webkit.WebMessageCompat;
+import org.json.JSONObject;
+import org.json.JSONException;
+import java.util.Collections;
 import java.io.ByteArrayInputStream;
 
 /**
@@ -26,11 +35,13 @@ import java.io.ByteArrayInputStream;
  * No native account bridge, secrets, external intents, autoplay, telemetry or
  * cross-process watched-state mutations. Native playback is NOT yet accepted.
  */
+@OptIn(markerClass = UnstableApi.class)
 public final class EnhancedTvActivity extends Activity {
     private WebView webView;
     private LinearLayout root;
     private TextView status;
     private WebViewAssetLoader assets;
+    private NativeMedia3Player nativePlayer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,8 +85,10 @@ public final class EnhancedTvActivity extends Activity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void createWebView() {
+        if (nativePlayer != null) { nativePlayer.destroy(); nativePlayer = null; }
         if (webView != null) { root.removeView(webView); webView.destroy(); }
         webView = new WebView(this);
+        nativePlayer = new NativeMedia3Player(this, root, webView);
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
         webView.setBackgroundColor(Color.rgb(20, 19, 33));
@@ -93,6 +106,32 @@ public final class EnhancedTvActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setGeolocationEnabled(false);
+        // Origin-scoped AndroidX listener, never addJavascriptInterface.
+        // Only explicit requests from the local top-level app document are eligible.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(webView, "stremioEnhancedTvNative",
+                Collections.singleton("https://" + NavigationPolicy.HOST),
+                (view, message, sourceOrigin, isMainFrame, replyProxy) -> {
+                    if (view != webView || !isMainFrame ||
+                            !"https://appassets.androidplatform.net".equals(sourceOrigin.toString()) ||
+                            !NavigationPolicy.isInternalNavigation(view.getUrl()) ||
+                            message.getType() != WebMessageCompat.TYPE_STRING) return;
+                    final String payload = message.getData();
+                    if (payload == null || payload.length() > 8192) return;
+                    try {
+                        final JSONObject data = new JSONObject(payload);
+                        if (data.length() != 3 || data.optInt("v", -1) != 1 ||
+                                !"play".equals(data.optString("type")) ||
+                                !(data.opt("url") instanceof String)) return;
+                        final String url = data.getString("url");
+                        if (nativePlayer != null && NativeSourcePolicy.isEligible(url)) {
+                            nativePlayer.request(url);
+                        }
+                    } catch (JSONException ignored) {
+                        // Never log selected URLs or malformed messages.
+                    }
+                });
+        }
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -124,6 +163,7 @@ public final class EnhancedTvActivity extends Activity {
             @Override
             public boolean onRenderProcessGone(WebView view,
                                                android.webkit.RenderProcessGoneDetail detail) {
+                if (nativePlayer != null) { nativePlayer.destroy(); nativePlayer = null; }
                 root.removeView(view);
                 view.destroy();
                 webView = null;
@@ -182,13 +222,16 @@ public final class EnhancedTvActivity extends Activity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
-            back(); return true;
+            if (nativePlayer != null && nativePlayer.isOpen()) nativePlayer.close();
+            else back();
+            return true;
         }
         return super.onKeyDown(keyCode, event);
     }
 
     @Override
     protected void onPause() {
+        if (nativePlayer != null) nativePlayer.pause();
         if (webView != null) webView.onPause();
         super.onPause();
     }
@@ -199,6 +242,7 @@ public final class EnhancedTvActivity extends Activity {
     }
     @Override
     protected void onDestroy() {
+        if (nativePlayer != null) { nativePlayer.destroy(); nativePlayer = null; }
         if (webView != null) { root.removeView(webView); webView.destroy(); webView = null; }
         super.onDestroy();
     }
