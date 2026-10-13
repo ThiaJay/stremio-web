@@ -113,7 +113,47 @@ if ! timeout 365 adb shell am instrument -w \
 fi
 if ! grep -Eq 'OK \(3 tests\)' "$result_file" || \
    grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|shortMsg=Process crashed' "$result_file"; then
-  echo 'HOSTQA_FAIL_MEDIA_DECODE_OR_PCM_NOT_ACCEPTED'
+  # Read only fixed test names, expected test counts and allowlisted synthetic
+  # failure labels. NEVER echo raw UI hierarchy, URL, stack or worker state.
+  python3 - "$result_file" <<'PY'
+import pathlib
+import sys
+s = pathlib.Path(sys.argv[1]).read_text(errors='replace')
+print('HOSTQA_INSTRUMENTATION_FAILURE_DIAGNOSTIC_BEGIN')
+for klass in ('EnhancedHostMediaInstrumentedTest',
+              'EnhancedEngineInstrumentedTest',
+              'EnhancedCoreRouteInstrumentedTest'):
+    print(('HOSTQA_TEST_CLASS_OBSERVED_' if klass in s else
+           'HOSTQA_TEST_CLASS_NOT_OBSERVED_') + klass)
+for count in (1, 2, 3):
+    if f'OK ({count} tests)' in s or f'OK ({count} test)' in s:
+        print(f'HOSTQA_INSTRUMENTATION_OK_COUNT_{count}')
+for phrase, marker in (
+    ('Core route preflight failed', 'CORE_PREFLIGHT'),
+    ('Anonymous Core cannot encode', 'CORE_NOT_READY'),
+    ('Real D-pad did not initiate', 'REMOTE_START'),
+    ('React Player hash route never mounted', 'PLAYER_ROUTE'),
+    ('Actual Core Player model and selected stream not ready', 'PLAYER_MODEL'),
+    ('Real Player HTMLVideo never loaded', 'VIDEO_NOT_FOUND'),
+    ('Core route video has an unrecovered error', 'PLAYER_ERROR'),
+    ('No accessible normal Play control', 'PLAY_CONTROL'),
+    ('Normal Stremio Play control did not start', 'MANUAL_PLAY'),
+    ('Core route failure', 'CORE_ROUTE_FINAL'),
+    ('FAILED (failures=', 'JUNIT_FAILURES'),
+    ('INSTRUMENTATION_FAILED', 'INSTRUMENTATION_FRAMEWORK')
+):
+    if phrase in s:
+        print('HOSTQA_FAILURE_' + marker)
+for code in ('core-unavailable','core-state-unavailable','not-anonymous',
+             'original-media-missing','invalid-local-sample',
+             'unsafe-blob-origin','core-stream-mismatch','core-stream-rejected',
+             'qa-prepare-error','player-video-not-found','media-decode',
+             'frame-api-unavailable'):
+    if code in s:
+        print('HOSTQA_CORE_REASON_' + code.replace('-', '_').upper())
+print('HOSTQA_INSTRUMENTATION_FAILURE_DIAGNOSTIC_END')
+PY
+  echo 'HOSTQA_FAIL_ONE_OR_MORE_INSTRUMENTATION_ACCEPTANCE_TESTS'
   exit 1
 fi
 # A passing test is not a passing workflow until the emulator has exited.
