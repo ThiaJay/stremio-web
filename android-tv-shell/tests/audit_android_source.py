@@ -6,8 +6,13 @@ import xml.etree.ElementTree as ET
 base=Path(__file__).resolve().parents[1]
 manifest=ET.parse(base/'app/src/main/AndroidManifest.xml').getroot()
 ns='{http://schemas.android.com/apk/res/android}'
-permissions=[e.attrib.get(ns+'name') for e in manifest.findall('uses-permission')]
-assert permissions==['android.permission.INTERNET'],permissions
+tools='{http://schemas.android.com/tools}'
+permissions=[(e.attrib.get(ns+'name'),e.attrib.get(tools+'node')) for e in manifest.findall('uses-permission')]
+assert permissions==[
+    ('android.permission.INTERNET',None),
+    ('android.permission.ACCESS_NETWORK_STATE','remove'),
+    ('android.permission.WAKE_LOCK','remove')
+],permissions
 app=manifest.find('application');assert app is not None
 assert app.attrib.get(ns+'allowBackup')=='false'
 assert app.attrib.get(ns+'usesCleartextTraffic')=='false'
