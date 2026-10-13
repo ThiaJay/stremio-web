@@ -14,6 +14,7 @@ test('requires an explicitly selected ready direct HTTPS source', () => {
     assert.equal(policy.eligibleUrl({url}, true, {url}), url);
     assert.equal(policy.eligibleUrl({url}, false, {url}), null);
     assert.equal(policy.eligibleUrl({url}, true, null), null);
+    assert.equal(policy.eligibleUrl({url}, true, {url:'https://other.example.org/a.mp4'}), null);
     assert.equal(policy.eligibleUrl({}, true, {url}), null);
 });
 test('forbids private network, secrets, non-HTTPS and arbitrary scheme URLs', () => {
