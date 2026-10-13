@@ -45,9 +45,10 @@ def analyse(log):
             continue
         m=re.match(r'^\s*INSTRUMENTATION_STATUS_CODE:\s*(-?\d+)\s*$',line)
         if m and (current_class,current_test) in TESTS:
+            # AndroidJUnitRunner may emit a start (1) followed by success
+            # (0) for the same class/test without repeating their labels.
+            # Retain that observed identity until the next class/test label.
             results[current_test].append(int(m.group(1)))
-            current_class=None
-            current_test=None
     # Standard AndroidJUnitRunner -w JUnit summary has lines like:
     # 1) testMethod(org.example.ExactClass). This is authentic failed-test
     # identity even where the runner emits no individual status codes.
