@@ -79,6 +79,19 @@ public final class EnhancedTvRemoteLifecycleInstrumentedTest {
         }while(android.os.SystemClock.elapsedRealtime()<end);
         return false;
     }
+    private static boolean waitForBackIndex(Instrumentation instrument,WebView view,
+                                            int before,int milliseconds)
+            throws InterruptedException {
+        long deadline=android.os.SystemClock.elapsedRealtime()+milliseconds;
+        do {
+            AtomicReference<Integer> index=new AtomicReference<>(before);
+            instrument.runOnMainSync(()->index.set(
+                view.copyBackForwardList().getCurrentIndex()));
+            if(index.get()<before)return true;
+            Thread.sleep(150);
+        }while(android.os.SystemClock.elapsedRealtime()<deadline);
+        return false;
+    }
     private static Activity launch(Instrumentation instrument) {
         Intent start=new Intent(instrument.getTargetContext(),EnhancedTvActivity.class);
         start.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -171,18 +184,23 @@ public final class EnhancedTvRemoteLifecycleInstrumentedTest {
             WebView view=mounted(instrument,activity);
             anonymous(instrument,view);
             stage("BACK_ANONYMOUS");
-            boolean hasHistory=view.canGoBack();
+            // WebView history methods must run on Android's UI thread.
+            AtomicReference<Integer> beforeIndex=new AtomicReference<>(-1);
+            instrument.runOnMainSync(()->beforeIndex.set(
+                view.copyBackForwardList().getCurrentIndex()));
+            stage("BACK_PRE_DISPATCH");
             instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
-            if(hasHistory&&!activity.isFinishing()) {
+            stage("BACK_REMOTE_EVENT_RETURNED");
+            if(finishing(activity,1500)) {
+                stage("BACK_EXIT_CONFIRMED");
+            }else {
+                assertTrue("Native Back did not exit or traverse internal history",
+                    waitForBackIndex(instrument,view,beforeIndex.get(),7000));
                 assertTrue("Remote Back navigated outside local host",
                     waitFor(instrument,view,
                         "location.origin==='https://appassets.androidplatform.net'",
                         12000));
                 stage("BACK_SAFE_INTERNAL_NAVIGATION");
-            }else {
-                assertTrue("Remote Back did not exit isolated TV host",
-                    finishing(activity,7000));
-                stage("BACK_EXIT_CONFIRMED");
             }
         }finally {
             instrument.runOnMainSync(activity::finish);
