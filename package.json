@@ -24,7 +24,7 @@
         "@stremio/stremio-colors": "5.2.0",
         "@stremio/stremio-core-web": "file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz",
         "@stremio/stremio-icons": "5.15.0",
-        "@stremio/stremio-video": "github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687",
+        "@stremio/stremio-video": "github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66",
         "bowser": "2.14.1",
         "buffer": "6.0.3",
         "classnames": "2.5.1",

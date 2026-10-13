@@ -1,0 +1,120 @@
+name: Stremio Enhanced Android TV HTMLVideo Night Audio integrated acceptance
+
+on:
+  push:
+    branches:
+      - feature/enhanced-tv-htmlvideo-night-audio-20261012-v1
+    paths:
+      - package.json
+      - pnpm-lock.yaml
+      - android-tv-shell/tests/emulator_smoke.sh
+      - android-tv-shell/tests/check_tv_accessibility.py
+      - android-tv-shell/tests/test_tv_accessibility.py
+      - .github/workflows/enhanced-tv-htmlvideo-night-audio.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-tv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source only without credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify disposable runner hardware virtualisation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo 'ANDROID_TV_EMULATOR_BLOCKED_NO_KVM_DEVICE'; exit 2; }
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            sudo chgrp "$(id -gn)" /dev/kvm
+            sudo chmod g+rw /dev/kvm
+          fi
+          test -r /dev/kvm && test -w /dev/kvm || {
+            echo 'ANDROID_TV_EMULATOR_BLOCKED_NO_KVM_PERMISSION'; exit 2;
+          }
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Pin exact Core archive and real HTMLVideo Night Audio source
+        run: |
+          node - <<'JS'
+          const fs=require('node:fs'), crypto=require('node:crypto');
+          const pkg=require('./package.json').dependencies;
+          const core=require('./vendor/core-web/provenance.json');
+          if(pkg['@stremio/stremio-video']!==
+              'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66')
+            throw Error('Video Night Audio source drift');
+          if(pkg['@stremio/stremio-core-web']!==
+              'file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz')
+            throw Error('Core package replaced');
+          if(crypto.createHash('sha256').update(
+              fs.readFileSync('vendor/core-web/'+core.tarballName)).digest('hex')!==core.sha256)
+            throw Error('Core archive hash mismatch');
+          console.log('ORIGINAL_CORE_AND_HTMLVIDEO_NIGHT_AUDIO_PINS_VERIFIED');
+          JS
+      - name: Install exact reviewed frozen dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Re-run Enhanced and standard Web regressions
+        run: |
+          node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
+          pnpm exec jest --runInBand
+          pnpm exec eslint src --max-warnings 287
+          pnpm audit --prod --audit-level moderate
+      - name: Build actual Web client including HTMLVideo Night Audio
+        run: pnpm exec webpack --mode production
+      - name: Validate packaged Web assets and Android source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s android-tv-shell/tests -v
+          python3 android-tv-shell/bundle_verified_web.py \
+            --src build \
+            --dst android-tv-shell/app/src/main/assets/web \
+            --source-sha "$GITHUB_SHA"
+          python3 android-tv-shell/tests/audit_android_source.py
+      - name: Install JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Install Android API 36 and build tools
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;35.0.0' >/dev/null
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Run Android tests, lint and build unsigned debug preview
+        run: gradle -p android-tv-shell :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon --stacktrace
+      - name: Audit exact independent Android preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android-tv-shell/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$aapt" dump badging "$apk" | grep -F "package: name='org.thiajay.stremioenhanced.tv'"
+          "$aapt" dump permissions "$apk" > /tmp/htmlnight-permissions.txt
+          python3 android-tv-shell/tests/audit_apk.py /tmp/htmlnight-permissions.txt "$apk"
+          sha256sum "$apk"
+      - name: Isolated Android TV emulator boot and anonymous WebView smoke
+        shell: bash
+        run: bash android-tv-shell/tests/emulator_smoke.sh
+
+# This is anonymous integration acceptance only. No credential, real stream,
+# physical device, upload, signing, production service or installer release.
