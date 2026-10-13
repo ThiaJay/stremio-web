@@ -75,6 +75,7 @@ echo 'ANDROID_TV_EMULATOR_AVD_REGISTERED'
 "$emulator_bin" -avd enhanced_tv_qa -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -accel on -wipe-data >/tmp/enhanced-tv-emulator.stdout 2>&1 &
 emu_pid=$!
 cleanup() {
+  rm -f /tmp/enhanced-tv-toolbar-qa-private.xml
   adb emu kill >/dev/null 2>&1 || true
   kill "$emu_pid" >/dev/null 2>&1 || true
   wait "$emu_pid" >/dev/null 2>&1 || true
@@ -103,8 +104,30 @@ if ! timeout 75 bash -c 'until adb logcat -d -s EnhancedTvSmoke:I "*:S" | grep -
   adb logcat -d -s AndroidRuntime:E EnhancedTvSmoke:I '*:S' | tail -25
   exit 1
 fi
-if ! adb shell dumpsys activity activities | grep -Fq 'org.thiajay.stremioenhanced.tv'; then
+# Inspect only well-known foreground-state fields and discard all their content.
+# A package name anywhere in the full task history is not proof of active focus.
+app_resumed() {
+  local summary
+  summary="$(adb shell dumpsys activity activities 2>/dev/null |
+      grep -E 'topResumedActivity|mResumedActivity|ResumedActivity' || true)"
+  [[ "$summary" == *"org.thiajay.stremioenhanced.tv"* ]]
+}
+app_window_focused() {
+  local summary
+  summary="$(adb shell dumpsys window 2>/dev/null |
+      grep -E 'mCurrentFocus=|mFocusedApp=' || true)"
+  [[ "$summary" == *"org.thiajay.stremioenhanced.tv"* ]]
+}
+if ! app_resumed; then
   echo 'ANDROID_TV_EMULATOR_FAIL_ACTIVITY_NOT_RESUMED'
+  exit 1
+fi
+for attempt in 1 2 3 4 5; do
+  if app_window_focused; then break; fi
+  sleep 2
+done
+if ! app_window_focused; then
+  echo 'ANDROID_TV_NATIVE_APP_WINDOW_NOT_FOCUSED_BEFORE_CAPTURE'
   exit 1
 fi
 # Confirm the native Back/Home/Reload/Exit toolbar is exposed to
@@ -119,7 +142,12 @@ capture_ui() {
   if adb exec-out cat "$remote_path" >"$ui_capture" 2>/dev/null &&
       test -s "$ui_capture"; then
     echo 'ANDROID_TV_NATIVE_TOOLBAR_XML_CAPTURED'
-    return 0
+    # A nonempty dump is not sufficient. Reject malformed, unrelated or
+    # inaccessible hierarchies and retry rather than claiming acceptance.
+    if python3 android-tv-shell/tests/check_tv_accessibility.py <"$ui_capture"; then
+      return 0
+    fi
+    echo 'ANDROID_TV_NATIVE_TOOLBAR_CAPTURE_REJECTED'
   fi
   rm -f "$ui_capture"
   return 1
@@ -169,21 +197,12 @@ for attempt in 1 2 3; do
   sleep 3
 done
 if [[ "$ui_captured" != true ]]; then
-  echo 'ANDROID_TV_NATIVE_TOOLBAR_XML_UNAVAILABLE_ON_EMULATOR'
+  echo 'ANDROID_TV_NATIVE_TOOLBAR_ACCESSIBILITY_NO_VALID_CAPTURE'
   exit 1
 fi
-if ! python3 android-tv-shell/tests/check_tv_accessibility.py <"$ui_capture"; then
-  rm -f "$ui_capture"
-  # The diagnostic must never print full dumpsys content or unknown window
-  # titles. Report only the presence of our own fixed package in focus fields.
-  if adb shell dumpsys window windows 2>/dev/null |
-      grep -E 'mCurrentFocus|mFocusedApp' |
-      grep -Fq 'org.thiajay.stremioenhanced.tv'; then
-    echo 'ANDROID_TV_NATIVE_APP_WINDOW_LISTED_AS_FOCUSED'
-  else
-    echo 'ANDROID_TV_NATIVE_APP_WINDOW_NOT_LISTED_AS_FOCUSED'
-  fi
-  echo 'ANDROID_TV_NATIVE_TOOLBAR_ACCESSIBILITY_FAILED'
+# Passing the XML check must not mask a subsequent loss of foreground focus.
+if ! app_resumed || ! app_window_focused; then
+  echo 'ANDROID_TV_NATIVE_APP_WINDOW_LOST_FOCUS_AFTER_CAPTURE'
   exit 1
 fi
 rm -f "$ui_capture"

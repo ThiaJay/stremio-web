@@ -51,6 +51,12 @@ class NativeToolbarAccessibilityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'EXIT'):
             verify_toolbar(fixture({'Exit': {'content-desc': ''}}))
 
+    def test_field_diagnostic_is_fixed_and_does_not_expose_private_values(self):
+        with self.assertRaises(ValueError) as caught:
+            verify_toolbar(fixture({'Back': {'content-desc': 'private-content-never-print'}}))
+        self.assertIn('FIELDS_DCFE_BACK0111', str(caught.exception))
+        self.assertNotIn('private-content-never-print', str(caught.exception))
+
     def test_oversize_or_invalid_xml_not_accepted(self):
         for content in (b'', b'<foo/>', b'<hierarchy', b'x' * 3_000_001):
             with self.subTest(length=len(content)):

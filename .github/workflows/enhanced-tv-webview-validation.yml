@@ -48,10 +48,16 @@ jobs:
           const deps=require('./package.json').dependencies;
           const core=require('./vendor/core-web/provenance.json');
           if(deps['@stremio/stremio-core-web']!=='file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz')throw Error('Unknown Core package');
-          if(deps['@stremio/stremio-video']!=='github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687')throw Error('Unknown Video fork');
+          const sourceByCandidate = Object.freeze({
+            'feature/enhanced-tv-webview-20261012-v1': 'github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687',
+            'feature/enhanced-tv-htmlvideo-night-audio-20261012-v1': 'github:ThiaJay/stremio-video#cdf2ba7b0a0a3ffe100c0da810d271e750d72a28'
+          });
+          const candidate = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
+          if (!Object.hasOwn(sourceByCandidate, candidate)) throw Error('Unrecognised TV candidate branch');
+          if (deps['@stremio/stremio-video'] !== sourceByCandidate[candidate]) throw Error('Video source drift for selected candidate');
           const hash=crypto.createHash('sha256').update(fs.readFileSync('vendor/core-web/'+core.tarballName)).digest('hex');
           if(hash!==core.sha256||core.coreSourceSha!=='303d7c0bb8bd6d55f11f2f751e55e66040da4f8c')throw Error('Core artifact drift');
-          console.log('Exact inherited Core and Video source verified');
+          console.log('Exact inherited Core and branch-bound Video source verified');
           JS
       - name: Install trusted lockfile without install scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
