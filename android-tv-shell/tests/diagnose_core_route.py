@@ -8,6 +8,8 @@ KNOWN_TESTS = (
     'fullAnonymousCorePlayerRouteAcceptsOriginalMedia',
     'pinnedStremioVideoBackendPlaysOriginalMediaWithNightAudio',
     'originalVideoAndPcmDecodeInsideActualEnhancedHost',
+    'nativeReloadHomeExitRequireActualRemoteKeys',
+    'nativeBackRemainsWithinSafeHostOrExits',
 )
 FAILURE_MARKERS = {
     'QA start control lost focus': 'QA_HTML_FOCUS',
@@ -27,6 +29,9 @@ FAILURE_MARKERS = {
     'Original Enhanced React not mounted': 'REACT_MOUNT',
     'No tests found': 'TEST_DISCOVERY',
     'FAILURES!!!': 'JUNIT_FAILURES',
+    'Native Back did not exit or traverse internal history': 'NATIVE_BACK_NO_NAVIGATION',
+    'Remote Back navigated outside local host': 'NATIVE_BACK_UNSAFE_ORIGIN',
+    'Remote QA JavaScript callback timed out': 'NATIVE_BACK_JS_CALLBACK',
     'INSTRUMENTATION_FAILED': 'INSTRUMENTATION_FRAMEWORK',
 }
 PROBLEMS = (
@@ -43,13 +48,14 @@ def diagnose(data):
     out = ['HOSTQA_DIAGNOSTIC_BEGIN']
     for klass in ('EnhancedHostMediaInstrumentedTest',
                   'EnhancedEngineInstrumentedTest',
-                  'EnhancedCoreRouteInstrumentedTest'):
+                  'EnhancedCoreRouteInstrumentedTest',
+                  'EnhancedTvRemoteLifecycleInstrumentedTest'):
         out.append(('HOSTQA_CLASS_OBSERVED_' if klass in data else
                     'HOSTQA_CLASS_NOT_OBSERVED_') + klass)
     for name in KNOWN_TESTS:
         if re.search(r'(?m)^INSTRUMENTATION_STATUS: test=' + re.escape(name) + r'\s*$',data):
             out.append('HOSTQA_TEST_EXECUTED_' + name)
-    for count in (1, 2, 3):
+    for count in (1, 2, 3, 4, 5):
         if f'OK ({count} tests)' in data or f'OK ({count} test)' in data:
             out.append('HOSTQA_TEST_COUNT_' + str(count))
     for phrase, label in FAILURE_MARKERS.items():
