@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/enhanced-tv-webview-20261012-v1
+      - feature/enhanced-tv-measured-night-audio-qa-20261013-v1
     paths:
       - 'android-tv-shell/**'
       - '.github/workflows/enhanced-tv-webview-validation.yml'
@@ -51,7 +52,8 @@ jobs:
           const sourceByCandidate = Object.freeze({
             'feature/enhanced-tv-webview-20261012-v1': 'github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687',
             'feature/enhanced-tv-htmlvideo-night-audio-20261012-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66',
-            'feature/enhanced-tv-original-media-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
+            'feature/enhanced-tv-original-media-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66',
+            'feature/enhanced-tv-measured-night-audio-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
           });
           const candidate = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
           if (!Object.hasOwn(sourceByCandidate, candidate)) throw Error('Unrecognised TV candidate branch');
@@ -118,7 +120,7 @@ jobs:
           sha256sum "$apk"
           echo 'SOURCE_ONLY_PREVIEW_BUILT: NOT INSTALLED, NOT RELEASED, NOT TESTED WITH AN ACCOUNT OR ON TV.'
       - name: Generate temporary original media for the actual Enhanced host
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: (github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1')
         shell: bash
         run: |
           set -euo pipefail
@@ -135,6 +137,19 @@ jobs:
             -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=5' \
             -c:v libx264 -preset ultrafast -threads 2 -pix_fmt yuv420p \
             -c:a aac -b:a 96k -movflags +faststart -shortest -y "$fixture"
+          # An independent louder original sine fixture, solely to measure
+          # real Stremio Night Audio compressor attenuation.
+          loud='android-tv-shell/app/src/debug/assets/web/qa-night-loud.mp4'
+          test ! -e "$loud"
+          if git ls-files --error-unmatch "$loud" >/dev/null 2>&1; then
+            echo 'HOSTQA_REJECT_COMMITTED_MEASUREMENT_MEDIA'; exit 1
+          fi
+          ffmpeg -nostdin -hide_banner -loglevel error \
+            -f lavfi -i 'testsrc2=duration=5:size=320x180:rate=15' \
+            -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=5' \
+            -af 'volume=4.0' \
+            -c:v libx264 -preset ultrafast -threads 2 -pix_fmt yuv420p \
+            -c:a aac -b:a 96k -movflags +faststart -shortest -y "$loud"
           python3 - <<'PY'
           import json, pathlib, subprocess
           path=pathlib.Path('android-tv-shell/app/src/debug/assets/web/qa-local.mp4')
@@ -146,19 +161,30 @@ jobs:
           assert ('video','h264') in codecs and ('audio','aac') in codecs
           assert 3 <= float(data['format']['duration']) <= 8
           print('HOSTQA_ORIGINAL_MEDIA_CODEC_AND_DURATION_PASS')
+          loud=path.with_name('qa-night-loud.mp4')
+          assert 15000 < loud.stat().st_size < 4000000
+          result=subprocess.run(['ffprobe','-v','error','-of','json','-show_streams',
+               '-show_format',str(loud)],check=True,text=True,capture_output=True,timeout=15)
+          data=json.loads(result.stdout)
+          codecs={(stream.get('codec_type'),stream.get('codec_name')) for stream in data['streams']}
+          assert ('video','h264') in codecs and ('audio','aac') in codecs
+          assert 3 <= float(data['format']['duration']) <= 8
+          print('HOSTQA_ORIGINAL_LOUD_MEDIA_CODEC_AND_DURATION_PASS')
           PY
       - name: Bundle exact pinned StremioVideo backend for test-only instrumentation
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: (github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1')
         shell: bash
         run: |
           set -euo pipefail
           pnpm exec webpack --config android-tv-shell/tests/video_qa.webpack.config.cjs --mode production --stats errors-only
           python3 android-tv-shell/tests/audit_real_engine_qa.py
+          pnpm exec webpack --config android-tv-shell/tests/video_measured_qa.webpack.config.cjs --mode production --stats errors-only
+          python3 android-tv-shell/tests/audit_measured_night_audio_qa.py
       - name: Assemble separate actual-host instrumentation test APK
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: (github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1')
         run: gradle -p android-tv-shell :app:assembleDebug :app:assembleAndroidTest --no-daemon --stacktrace
       - name: Enable runner KVM for temporary television emulator
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: (github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1')
         shell: bash
         run: |
           set -euo pipefail
@@ -169,7 +195,7 @@ jobs:
           fi
           test -r /dev/kvm && test -w /dev/kvm || exit 2
       - name: Exercise original media in the real Enhanced TV WebView
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: (github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-measured-night-audio-qa-20261013-v1')
         shell: bash
         run: timeout --signal=TERM --kill-after=10s 540s bash android-tv-shell/tests/host_media_emulator.sh
       - name: Clear disposable media and instrumentation receipt
@@ -177,5 +203,7 @@ jobs:
         shell: bash
         run: |
           rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-night-loud.mp4
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-video-engine-measured.js
           rm -f /tmp/enhanced-hostqa-instrumentation-private.txt
 # Deliberately no artifact uploads, Pages deployment, releases, signing or device connection.
