@@ -97,7 +97,7 @@ public final class EnhancedCoreRouteInstrumentedTest {
         String code=evaluate(instrument,view,
             "window.__coreRouteQa?.coreProbe?." + field);
         for(int i=0;i+1<allowedPairs.length;i+=2){
-            if(("\u0022"+allowedPairs[i]+"\u0022").equals(code)){
+            if(("\""+allowedPairs[i]+"\"").equals(code)){
                 stage(allowedPairs[i+1]);
                 return;
             }
