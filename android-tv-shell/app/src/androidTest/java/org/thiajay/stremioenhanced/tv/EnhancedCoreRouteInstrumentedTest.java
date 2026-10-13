@@ -69,6 +69,26 @@ public final class EnhancedCoreRouteInstrumentedTest {
         return evaluate(instrument,view,"window.__coreRouteQa?.problem||'script-not-started'");
     }
 
+    // Privacy-safe fixed reasons only. Never log raw JavaScript, URLs, auth
+    // values, cookies, worker data or exception strings from the WebView.
+    private static void reportPreflightReason(String code) {
+        switch (code) {
+            case "\"core-unavailable\"": stage("PREFLIGHT_CORE_UNAVAILABLE"); break;
+            case "\"core-state-unavailable\"": stage("PREFLIGHT_CORE_STATE_UNAVAILABLE"); break;
+            case "\"not-anonymous\"": stage("PREFLIGHT_NOT_ANONYMOUS"); break;
+            case "\"original-media-missing\"": stage("PREFLIGHT_MEDIA_MISSING"); break;
+            case "\"invalid-local-sample\"": stage("PREFLIGHT_MEDIA_INVALID"); break;
+            case "\"unsafe-blob-origin\"": stage("PREFLIGHT_BLOB_ORIGIN"); break;
+            case "\"core-stream-mismatch\"": stage("PREFLIGHT_CORE_STREAM_MISMATCH"); break;
+            case "\"core-stream-rejected\"": stage("PREFLIGHT_CORE_STREAM_REJECTED"); break;
+            case "\"qa-prepare-error\"": stage("PREFLIGHT_QA_PREPARE_ERROR"); break;
+            case "\"player-video-not-found\"": stage("PREFLIGHT_PLAYER_VIDEO_MISSING"); break;
+            case "\"media-decode\"": stage("PREFLIGHT_MEDIA_DECODE"); break;
+            case "\"frame-api-unavailable\"": stage("PREFLIGHT_FRAME_API_UNAVAILABLE"); break;
+            default: stage("PREFLIGHT_UNRECOGNISED"); break;
+        }
+    }
+
     @Test(timeout=175000)
     public void fullAnonymousCorePlayerRouteAcceptsOriginalMedia() throws Exception {
         Instrumentation instrument=InstrumentationRegistry.getInstrumentation();
@@ -98,7 +118,9 @@ public final class EnhancedCoreRouteInstrumentedTest {
                     "window.__coreRouteQa?.ready===true || " +
                     "(window.__coreRouteQa?.problem!==undefined && " +
                     "window.__coreRouteQa?.problem!=='none')",58000));
-            assertEquals("Core route preflight failed","\"none\"",problem(instrument,view));
+            String preflight=problem(instrument,view);
+            if (!"\"none\"".equals(preflight)) reportPreflightReason(preflight);
+            assertEquals("Core route preflight failed","\"none\"",preflight);
             assertEquals("true",evaluate(instrument,view,
                 "window.__coreRouteQa?.anonymous===true"));
             stage("CORE_ANONYMOUS_ENCODED");

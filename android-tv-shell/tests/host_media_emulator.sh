@@ -5,6 +5,13 @@ apk="android-tv-shell/app/build/outputs/apk/debug/app-debug.apk"
 test_apk="android-tv-shell/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
 test -s "$test_apk"
 test -s "$apk"
+# One disposable emulator per invocation. Only previously accepted API 34
+# and the physical AFTKRT's Android API 30 may be requested.
+target_api="${HOSTQA_TARGET_API:-34}"
+case "$target_api" in
+  30|34) ;;
+  *) echo "HOSTQA_BLOCKED_UNREVIEWED_ANDROID_API"; exit 2 ;;
+esac
 command -v sdkmanager >/dev/null
 command -v avdmanager >/dev/null
 command -v adb >/dev/null
@@ -19,7 +26,12 @@ available="$(sdkmanager --list |
   grep -Eo 'system-images;android-(30|31|32|33|34|35);android-tv;(x86|x86_64)' |
   sort -Vu || true)"
 [[ -n "$available" ]] || { echo "HOSTQA_BLOCKED_NO_ANDROID_TV_IMAGE"; exit 2; }
-chosen="$(printf '%s\n' "$available" | tail -1)"
+chosen="$(printf '%s\n' "$available" |
+  grep -E "^system-images;android-${target_api};android-tv;(x86|x86_64)$" |
+  tail -1 || true)"
+[[ -n "$chosen" ]] || {
+  echo "HOSTQA_BLOCKED_TARGET_ANDROID_TV_IMAGE_UNAVAILABLE"; exit 2;
+}
 sdkmanager --install "$chosen" >/dev/null
 if avdmanager list device -c | grep -Fxq 'tv_1080p'; then
   tv="tv_1080p"
@@ -77,7 +89,11 @@ cleanup() {
   fi
   wait "$emulator_pid" >/dev/null 2>&1 || true
   rm -f /tmp/enhanced-hostqa-instrumentation-private.txt
-  rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
+  # Preserve the disposable original media only between the two API runs.
+  # The workflow's always-run cleanup independently removes it on failure.
+  if [[ "${HOSTQA_CLEAN_FIXTURE:-1}" == "1" ]]; then
+    rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
+  fi
   if kill -0 "$emulator_pid" 2>/dev/null; then
     echo "HOSTQA_FAIL_EMULATOR_TEARDOWN"
     return 1
@@ -96,7 +112,7 @@ do sleep 3; done'; then
 fi
 sdk="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
 echo "HOSTQA_EMULATOR_BOOTED_API_${sdk}"
-[[ "$sdk" == "34" ]] || { echo "HOSTQA_WRONG_API"; exit 2; }
+[[ "$sdk" == "$target_api" ]] || { echo "HOSTQA_WRONG_API"; exit 2; }
 adb logcat -c || true
 # The real application APK and its separate test-only instrumentation APK
 # are installed ONLY on the disposable Android emulator.
@@ -132,4 +148,5 @@ fi
 cleanup
 echo 'HOSTQA_ACTUAL_ENHANCED_HOST_H264_AAC_AND_PCM_PASS'
 echo 'HOSTQA_NATIVE_REMOTE_NAVIGATION_LIFECYCLE_PASS'
+echo "HOSTQA_TARGET_API_${target_api}_TESTS_AND_TEARDOWN_PASS"
 echo 'HOSTQA_ORIGINAL_EMULATOR_FIXTURE_NO_ACCOUNT_NO_DEVICE_NO_RELEASE'
