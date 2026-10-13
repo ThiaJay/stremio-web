@@ -104,16 +104,28 @@ adb install -r "$apk" >/dev/null
 adb install -r "$test_apk" >/dev/null
 result_file='/tmp/enhanced-hostqa-instrumentation-private.txt'
 rm -f "$result_file"
-if ! timeout 175 adb shell am instrument -w \
-  -e class org.thiajay.stremioenhanced.tv.EnhancedHostMediaInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedEngineInstrumentedTest \
+if ! timeout 365 adb shell am instrument -w \
+  -e class org.thiajay.stremioenhanced.tv.EnhancedHostMediaInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedEngineInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedCoreRouteInstrumentedTest \
   org.thiajay.stremioenhanced.tv.test/androidx.test.runner.AndroidJUnitRunner \
   >"$result_file" 2>&1; then
   echo 'HOSTQA_FAIL_INSTRUMENTATION_RUNTIME'
   exit 1
 fi
-if ! grep -Eq 'OK \(2 tests\)' "$result_file" || \
+if ! grep -Eq 'OK \(3 tests\)' "$result_file" || \
    grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|shortMsg=Process crashed' "$result_file"; then
-  echo 'HOSTQA_FAIL_MEDIA_DECODE_OR_PCM_NOT_ACCEPTED'
+  # Read only fixed test names, expected test counts and allowlisted synthetic
+  # failure labels. NEVER echo raw UI hierarchy, URL, stack or worker state.
+  python3 android-tv-shell/tests/diagnose_core_route.py "$result_file"
+  # Read the disposable Android emulator tag into a local file only.
+  # The allowlist printer cannot publish private logcat content.
+  stage_file='/tmp/enhanced-core-stages-private.txt'
+  if timeout 10 adb logcat -d -s EnhancedCoreQA:I '*:S' > "$stage_file" 2>/dev/null; then
+    python3 android-tv-shell/tests/report_core_stages.py "$stage_file"
+  else
+    echo 'HOSTQA_CORE_STAGE_CAPTURE_UNAVAILABLE'
+  fi
+  rm -f "$stage_file"
+  echo 'HOSTQA_FAIL_ONE_OR_MORE_INSTRUMENTATION_ACCEPTANCE_TESTS'
   exit 1
 fi
 # A passing test is not a passing workflow until the emulator has exited.

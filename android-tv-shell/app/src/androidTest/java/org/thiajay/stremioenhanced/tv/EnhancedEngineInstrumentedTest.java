@@ -3,6 +3,7 @@ package org.thiajay.stremioenhanced.tv;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,6 +24,10 @@ import static org.junit.Assert.*;
  */
 @RunWith(AndroidJUnit4.class)
 public final class EnhancedEngineInstrumentedTest {
+    // Fixed anonymous milestones only; never expose raw Android WebView data.
+    private static void stage(String code) {
+        Log.i("EnhancedCoreQA", "CORE_QA_STAGE_" + code);
+    }
     private static WebView findWebView(View view) {
         if (view instanceof WebView) return (WebView) view;
         if (view instanceof ViewGroup) {
@@ -67,6 +72,7 @@ public final class EnhancedEngineInstrumentedTest {
                 target.set(findWebView(activity.getWindow().getDecorView())));
             WebView view = target.get();
             assertNotNull("Actual Enhanced TV WebView missing", view);
+            stage("ENGINE_WEBVIEW_PRESENT");
             assertTrue("Enhanced React not mounted in actual host",
                 waitFor(instrument, view,
                     "location.origin==='https://appassets.androidplatform.net' && " +
@@ -80,23 +86,32 @@ public final class EnhancedEngineInstrumentedTest {
                     "window.__enhancedBackendQa?.ready===true", 28000));
             assertEquals("true",evaluate(instrument,view,
                 "window.__enhancedBackendQa?.backend===true"));
-            assertTrue("Real engine start control not focused",
-                waitFor(instrument, view,
-                    "document.activeElement?.id==='enhanced-real-engine-start'", 6000));
+            stage("ENGINE_READY");
+            // Recover native and HTML keyboard focus after WebView boot.
+            // The genuine Android remote centre key remains mandatory.
             instrument.runOnMainSync(view::requestFocus);
+            assertTrue("Real engine start control cannot receive keyboard focus",
+                waitFor(instrument, view,
+                    "(()=>{const b=document.getElementById('enhanced-real-engine-start');" +
+                    "if(!b||b.disabled)return false;b.focus();return document.activeElement===b})()",
+                    6000));
+            stage("ENGINE_BUTTON_FOCUSED");
             instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
             assertTrue("Emulated TV remote gesture not received by real engine",
                 waitFor(instrument, view,
                     "window.__enhancedBackendQa?.gesture===true", 6000));
+            stage("ENGINE_REMOTE_KEY_ACCEPTED");
             assertTrue("Real backend video and guarded Night Audio on/off not established",
                 waitFor(instrument, view,
                     "window.__enhancedBackendQa?.video===true && " +
                     "window.__enhancedBackendQa?.audioActive===true && " +
                     "window.__enhancedBackendQa?.audioOff===true", 25000));
+            stage("ENGINE_NIGHT_AUDIO_VERIFIED");
             assertEquals("true", evaluate(instrument, view,
                 "window.__enhancedBackendQa?.error===false"));
             assertEquals("true", evaluate(instrument, view,
                 "Boolean(document.getElementById('app')?.children.length > 0)"));
+            stage("ENGINE_TEST_COMPLETE");
         } finally {
             instrument.runOnMainSync(activity::finish);
         }
