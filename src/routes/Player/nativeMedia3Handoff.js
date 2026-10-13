@@ -8,8 +8,11 @@ const eligibleUrl = (stream, coreReady, selected) => {
     if (coreReady !== true || typeof selected?.url !== 'string' ||
         typeof stream?.url !== 'string' || selected.url !== stream.url) return null;
     const url = stream.url;
-    if (!url.startsWith('https://') || url.length > 4096 ||
-        url !== url.trim() || /[\u0000-\u0020\u007f\\]/u.test(url)) return null;
+    if (!url.startsWith('https://') || url.length > 4096 || url !== url.trim()) return null;
+    for (let i = 0; i < url.length; i++) {
+        const c = url.charCodeAt(i);
+        if (c <= 0x20 || c === 0x7f || c === 0x5c) return null;
+    }
     try {
         const parsed = new URL(url);
         const host = parsed.hostname.toLowerCase();
