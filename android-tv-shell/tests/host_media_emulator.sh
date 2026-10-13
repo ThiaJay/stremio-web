@@ -105,13 +105,13 @@ adb install -r "$test_apk" >/dev/null
 result_file='/tmp/enhanced-hostqa-instrumentation-private.txt'
 rm -f "$result_file"
 if ! timeout 365 adb shell am instrument -w \
-  -e class org.thiajay.stremioenhanced.tv.EnhancedHostMediaInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedEngineInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedCoreRouteInstrumentedTest \
+  -e class org.thiajay.stremioenhanced.tv.EnhancedHostMediaInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedEngineInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedCoreRouteInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedTvRemoteLifecycleInstrumentedTest \
   org.thiajay.stremioenhanced.tv.test/androidx.test.runner.AndroidJUnitRunner \
   >"$result_file" 2>&1; then
   echo 'HOSTQA_FAIL_INSTRUMENTATION_RUNTIME'
   exit 1
 fi
-if ! grep -Eq 'OK \(3 tests\)' "$result_file" || \
+if ! grep -Eq 'OK \(5 tests\)' "$result_file" || \
    grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|shortMsg=Process crashed' "$result_file"; then
   # Read only fixed test names, expected test counts and allowlisted synthetic
   # failure labels. NEVER echo raw UI hierarchy, URL, stack or worker state.
@@ -131,4 +131,5 @@ fi
 # A passing test is not a passing workflow until the emulator has exited.
 cleanup
 echo 'HOSTQA_ACTUAL_ENHANCED_HOST_H264_AAC_AND_PCM_PASS'
+echo 'HOSTQA_NATIVE_REMOTE_NAVIGATION_LIFECYCLE_PASS'
 echo 'HOSTQA_ORIGINAL_EMULATOR_FIXTURE_NO_ACCOUNT_NO_DEVICE_NO_RELEASE'
