@@ -164,7 +164,7 @@ jobs:
       - name: Exercise original media in the real Enhanced TV WebView
         if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
         shell: bash
-        run: bash android-tv-shell/tests/host_media_emulator.sh
+        run: timeout --signal=TERM --kill-after=10s 540s bash android-tv-shell/tests/host_media_emulator.sh
       - name: Clear disposable media and instrumentation receipt
         if: always()
         shell: bash
