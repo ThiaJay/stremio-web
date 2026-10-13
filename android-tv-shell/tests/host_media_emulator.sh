@@ -104,19 +104,22 @@ adb install -r "$apk" >/dev/null
 adb install -r "$test_apk" >/dev/null
 result_file='/tmp/enhanced-hostqa-instrumentation-private.txt'
 rm -f "$result_file"
-if ! timeout 175 adb shell am instrument -w \
-  -e class org.thiajay.stremioenhanced.tv.EnhancedHostMediaInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedEngineInstrumentedTest \
+if ! timeout 330 adb shell am instrument -w \
+  -e class org.thiajay.stremioenhanced.tv.EnhancedHostMediaInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedEngineInstrumentedTest,org.thiajay.stremioenhanced.tv.EnhancedSubtitleInstrumentedTest \
   org.thiajay.stremioenhanced.tv.test/androidx.test.runner.AndroidJUnitRunner \
   >"$result_file" 2>&1; then
+  python3 android-tv-shell/tests/report_subtitle_qa.py "$result_file"
   echo 'HOSTQA_FAIL_INSTRUMENTATION_RUNTIME'
   exit 1
 fi
-if ! grep -Eq 'OK \(2 tests\)' "$result_file" || \
+if ! grep -Eq 'OK \(3 tests\)' "$result_file" || \
    grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|shortMsg=Process crashed' "$result_file"; then
+  python3 android-tv-shell/tests/report_subtitle_qa.py "$result_file"
   echo 'HOSTQA_FAIL_MEDIA_DECODE_OR_PCM_NOT_ACCEPTED'
   exit 1
 fi
 # A passing test is not a passing workflow until the emulator has exited.
 cleanup
 echo 'HOSTQA_ACTUAL_ENHANCED_HOST_H264_AAC_AND_PCM_PASS'
+echo 'HOSTQA_ORIGINAL_SUBTITLE_POLICY_BACKEND_RENDER_PASS'
 echo 'HOSTQA_ORIGINAL_EMULATOR_FIXTURE_NO_ACCOUNT_NO_DEVICE_NO_RELEASE'
