@@ -27,6 +27,80 @@
     let routeRequestedAt=0;
     const fail=(reason)=>{if(state.problem==='none')state.problem=reason;};
 
+
+    // Runs only after genuine Core failure. This cannot bypass the Core gate.
+    // All requests stay within fixed appassets paths, without account data.
+    async function diagnoseCoreBootstrap() {
+        const p={
+            done:false,workerApi:'unknown',wasmApi:'unknown',
+            bundle:'unknown',workerAsset:'unknown',workerLaunch:'unknown',
+            wasmAsset:'unknown',wasmMime:'unknown',wasmCompile:'unknown'
+        };
+        state.coreProbe=p;
+        const boundedLocalFetch=async(path)=>{
+            const controller=new AbortController();
+            const timeout=setTimeout(()=>controller.abort(),10000);
+            try {
+                return await fetch(path,{
+                    cache:'no-store',credentials:'omit',redirect:'error',
+                    signal:controller.signal
+                });
+            } finally { clearTimeout(timeout); }
+        };
+        try {
+            p.workerApi=typeof Worker==='function'?'present':'missing';
+            p.wasmApi=typeof WebAssembly!=='undefined' &&
+                typeof WebAssembly.compile==='function'?'present':'missing';
+            const main=Array.from(document.querySelectorAll('script[src]'))
+                .map(node=>{try{return new URL(node.src,location.href);}catch(_){return null;}})
+                .find(url=>url&&url.origin===origin&&
+                    /^\/assets\/web\/[a-f0-9]{40}\/scripts\/main\.js$/.test(url.pathname));
+            if(!main){p.bundle='missing';return;}
+            p.bundle='verified';
+            const prefix=main.pathname.slice(0,-'scripts/main.js'.length);
+            const workerPath=prefix+'scripts/worker.js';
+            const wasmPath=prefix+'binaries/stremio_core_web_bg.wasm';
+            try {
+                const response=await boundedLocalFetch(workerPath);
+                p.workerAsset=response.ok?'present':'missing';
+            }catch(_){p.workerAsset='missing';}
+            if(p.workerApi==='present'&&p.workerAsset==='present'){
+                let diagnosticWorker=null;
+                try {
+                    // No init is sent. Successful construction is NOT Core acceptance.
+                    diagnosticWorker=new Worker(workerPath);
+                    p.workerLaunch=await new Promise(resolve=>{
+                        let settled=false;
+                        const finish=value=>{if(!settled){settled=true;resolve(value);}};
+                        diagnosticWorker.addEventListener('error',
+                            ()=>finish('script-error'),{once:true});
+                        setTimeout(()=>finish('no-immediate-error'),1800);
+                    });
+                }catch(_){p.workerLaunch='constructor-error';}
+                finally{if(diagnosticWorker)diagnosticWorker.terminate();}
+            }
+            let response;
+            try {
+                response=await boundedLocalFetch(wasmPath);
+                p.wasmAsset=response.ok?'present':'missing';
+            }catch(_){p.wasmAsset='missing';}
+            if(p.wasmAsset!=='present')return;
+            p.wasmMime=(response.headers.get('content-type')||'')
+                .split(';')[0].trim().toLowerCase()==='application/wasm'?'correct':'other';
+            const bytes=await response.arrayBuffer();
+            if(bytes.byteLength<100000||bytes.byteLength>10000000){
+                p.wasmAsset='invalid-size';return;
+            }
+            if(p.wasmApi==='present'){
+                p.wasmCompile=await Promise.race([
+                    WebAssembly.compile(bytes).then(()=>'pass',()=>'fail'),
+                    new Promise(resolve=>setTimeout(()=>resolve('timeout'),12500))
+                ]);
+            }
+        }catch(_){p.bundle=p.bundle==='unknown'?'error':p.bundle;}
+        finally{p.done=true;}
+    }
+
     function attachMedia(){
         if(media)return true;
         const candidate=Array.from(document.querySelectorAll('video')).find(v=>{
@@ -90,7 +164,7 @@
         while((!window.core||typeof window.core.getState!=='function')&&
               Date.now()<deadline)await new Promise(r=>setTimeout(r,350));
         const core=window.core;
-        if(!core){fail('core-unavailable');return;}
+        if(!core){fail('core-unavailable');void diagnoseCoreBootstrap();return;}
         let ctx;
         try {ctx=await core.getState('ctx');}
         catch(_){fail('core-state-unavailable');return;}
