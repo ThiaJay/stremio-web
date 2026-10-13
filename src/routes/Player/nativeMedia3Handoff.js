@@ -5,7 +5,8 @@
 const NAME = 'stremioEnhancedTvNative';
 
 const eligibleUrl = (stream, coreReady, selected) => {
-    if (coreReady !== true || !selected || typeof stream?.url !== 'string') return null;
+    if (coreReady !== true || typeof selected?.url !== 'string' ||
+        typeof stream?.url !== 'string' || selected.url !== stream.url) return null;
     const url = stream.url;
     if (!url.startsWith('https://') || url.length > 4096 ||
         url !== url.trim() || /[\u0000-\u0020\u007f\\]/u.test(url)) return null;
@@ -35,7 +36,7 @@ const bridgeForWindow = (w) => {
 
 const requestNativePlayback = (bridge, url) => {
     if (!bridge || typeof bridge.postMessage !== 'function' ||
-        eligibleUrl({ url }, true, true) === null) return false;
+        eligibleUrl({ url }, true, { url }) === null) return false;
     try {
         bridge.postMessage(JSON.stringify({ v: 1, type: 'play', url }));
         return true;
