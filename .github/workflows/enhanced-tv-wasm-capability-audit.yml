@@ -1,0 +1,113 @@
+name: Stremio Core pinned WASM compatibility audit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/enhanced-tv-wasm-capability-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-wasm-features:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source without retained credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Audit pinned Core WASM using only standard offline tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export WASM_PATH="$RUNNER_TEMP/pinned-stremio-core.wasm"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, tarfile
+
+          root = Path.cwd()
+          provenance = json.loads((root/'vendor/core-web/provenance.json').read_text())
+          assert provenance['coreSourceSha']=='303d7c0bb8bd6d55f11f2f751e55e66040da4f8c'
+          assert provenance['tarballName']=='stremio-stremio-core-web-0.65.0.tgz'
+          archive=root/'vendor/core-web'/provenance['tarballName']
+          assert archive.is_file() and archive.stat().st_size < 3_000_000
+          assert hashlib.sha256(archive.read_bytes()).hexdigest()==provenance['sha256']
+          with tarfile.open(archive,mode='r:gz') as tar:
+              names=[member for member in tar.getmembers()
+                     if member.isfile() and member.name.endswith('/stremio_core_web_bg.wasm')]
+              assert len(names)==1 and names[0].size < 12_000_000
+              f=tar.extractfile(names[0])
+              assert f is not None
+              wasm=f.read()
+          assert 100_000<len(wasm)<12_000_000 and wasm[:8]==b'\0asm\1\0\0\0'
+
+          def uleb(data, i):
+              result=0
+              for shift in range(0,35,7):
+                  if i>=len(data): raise ValueError('Truncated WASM section')
+                  b=data[i];i+=1
+                  result|=(b&127)<<shift
+                  if not b&128:return result,i
+              raise ValueError('Oversized section length')
+          def name(data,i):
+              length,i=uleb(data,i)
+              if length>len(data)-i:raise ValueError('Invalid name length')
+              return bytes(data[i:i+length]).decode('utf-8'),i+length
+
+          features=None
+          offset=8
+          while offset<len(wasm):
+              kind=wasm[offset];offset+=1
+              size,offset=uleb(wasm,offset)
+              assert size<=len(wasm)-offset
+              part=memoryview(wasm)[offset:offset+size]
+              offset+=size
+              if kind!=0:continue
+              name_value,i=name(part,0)
+              if name_value!='target_features':continue
+              assert features is None
+              length,i=uleb(part,i)
+              assert length<100
+              found=[]
+              for _ in range(length):
+                  assert i<len(part)
+                  sign=chr(part[i]);i+=1
+                  item,i=name(part,i)
+                  assert sign in '+-' and 0<len(item)<64
+                  found.append((sign,item))
+              assert i==len(part)
+              features=found
+
+          allow={'mutable-globals','sign-ext','bulk-memory','reference-types',
+                 'simd128','relaxed-simd','atomics','multivalue',
+                 'nontrapping-fptoint','exception-handling','extended-const',
+                 'tail-call','multimemory','multi-memory','memory64','gc',
+                 'typed-funcref','wide-arithmetic','call-indirect-overlong',
+                 'bulk-memory-opt','multivalue','nontrapping-fptoint','fp16'}
+          assert features is None or all(item in allow for _,item in features),(
+              'UNRECOGNISED_TARGET_FEATURE_REQUIRES_REVIEW')
+          print('PINNED_CORE_ARCHIVE_HASH_PASS')
+          print('PINNED_CORE_WASM_CONTAINER_PASS')
+          if features is None:
+              print('PINNED_CORE_TARGET_FEATURE_SECTION_ABSENT')
+          else:
+              print('PINNED_CORE_TARGET_FEATURE_SECTION_PRESENT')
+              for sign,item in sorted(features):
+                  print('PINNED_CORE_TARGET_FEATURE_'+
+                        ('ENABLED_' if sign=='+' else 'DISABLED_')+
+                        item.upper().replace('-','_'))
+          # Isolated runner path is never published as an artifact.
+          Path(os.environ['WASM_PATH']).write_bytes(wasm)
+          PY
+          node - <<'JS'
+          const fs=require('fs');
+          const bytes=fs.readFileSync(process.env.WASM_PATH);
+          WebAssembly.compile(bytes).then(
+            ()=>{console.log('PINNED_CORE_WASM_NODE22_COMPILE_PASS')},
+            ()=>{console.log('PINNED_CORE_WASM_NODE22_COMPILE_FAIL');process.exitCode=2}
+          );
+          JS
+          rm -f "$WASM_PATH"
+          echo PINNED_CORE_WASM_STATIC_FEATURE_AUDIT_COMPLETE
