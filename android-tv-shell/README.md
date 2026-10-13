@@ -2,6 +2,8 @@
 
 This is an **unofficial, separately packaged Android TV host for the actual Enhanced Web build**. It is not the previous synthetic Media3 companion, not a Stremio release, and not yet a verified client for the owner's Fire TV.
 
+The independent experimental Media3 PCM proof has been preserved byte for byte in [reference-media3](reference-media3/README.md), outside the WebView application's Java source set. This avoids pulling native Media3 into the actual WebView APK, and it does not establish a working native player.
+
 Source authority: existing Web [PR 42](https://github.com/ThiaJay/stremio-web/pull/42), itself stacked on Web Night Audio PR 41; the private Foundation [PR 68](https://github.com/ThiaJay/stremio-development-foundation/pull/68) governs publication, acceptance and safety.
 
 ## What it adds

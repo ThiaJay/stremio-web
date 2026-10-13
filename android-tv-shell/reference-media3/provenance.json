@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "recorded": "2026-10-13",
+  "original_head": "9982ceb5173cd1d1688c0f5064100757952e3b56",
+  "scope": "Isolated source-only Media3 PCM reference, excluded from Android WebView APK source set",
+  "original_directory": "android-tv-shell/app/src/main/java/org/stremio/nightaudio/reference",
+  "new_directory": "android-tv-shell/reference-media3/src/main/java/org/stremio/nightaudio/reference",
+  "files": {
+    "NightAudioMedia3Processor.java": {
+      "git_blob_sha": "a731a856a1bb99b54ec32e47f542d979136997a9"
+    },
+    "NightAudioPlaybackGate.java": {
+      "git_blob_sha": "5978f01b13a1b061f3e5fa7e305773fd57747cb8"
+    },
+    "PcmDynamicsProcessor.java": {
+      "git_blob_sha": "c18062bf3178d02698434fdcac025e449a6702ea"
+    }
+  },
+  "release_eligible": false
+}
