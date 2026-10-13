@@ -192,7 +192,7 @@ jobs:
           trap cleanup EXIT
           if ! timeout 210 bash -c 'until
             adb devices | grep -q "emulator-[0-9]*[[:space:]]*device" &&
-            [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]]
+            [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" == 1 ]]
           do sleep 3; done'; then
             echo STOCK_API30_HOLD_BOOT_TIMEOUT; exit 2
           fi
