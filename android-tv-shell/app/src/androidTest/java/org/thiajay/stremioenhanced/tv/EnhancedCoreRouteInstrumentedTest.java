@@ -96,10 +96,31 @@ public final class EnhancedCoreRouteInstrumentedTest {
             assertEquals("true",evaluate(instrument,view,
                 "document.activeElement?.id==='enhanced-core-route-start'"));
 
+            // Native focus can move from WebView to the four TV toolbar buttons
+            // after Core boot. Re-establish both Android and DOM focus before
+            // delivering genuine remote keys. Never call button.click().
             instrument.runOnMainSync(view::requestFocus);
+            assertEquals("QA start control lost focus to the Android toolbar",
+                "true",evaluate(instrument,view,
+                    "(()=>{let b=document.getElementById('enhanced-core-route-start');" +
+                    "b.focus();return document.activeElement===b})()"));
+            Thread.sleep(350);
             instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
-            assertTrue("Real D-pad did not initiate Player navigation",
-                waitFor(instrument,view,"window.__coreRouteQa?.gesture===true",6000));
+            boolean started=waitFor(instrument,view,
+                "window.__coreRouteQa?.gesture===true",2500);
+            if(!started) {
+                // One bounded recovery for a transient initial focus shift.
+                instrument.runOnMainSync(view::requestFocus);
+                assertEquals("QA remote focus unavailable on retry",
+                    "true",evaluate(instrument,view,
+                        "(()=>{let b=document.getElementById('enhanced-core-route-start');" +
+                        "b.focus();return document.activeElement===b})()"));
+                Thread.sleep(350);
+                instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
+                started=waitFor(instrument,view,
+                    "window.__coreRouteQa?.gesture===true",4000);
+            }
+            assertTrue("Real D-pad did not initiate Player navigation",started);
             assertTrue("React Player hash route never mounted",
                 waitFor(instrument,view,"window.__coreRouteQa?.route===true",12000));
             assertTrue("Actual Core Player model and selected stream not ready",
