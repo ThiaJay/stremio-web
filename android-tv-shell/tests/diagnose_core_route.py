@@ -29,6 +29,9 @@ FAILURE_MARKERS = {
     'Original Enhanced React not mounted': 'REACT_MOUNT',
     'No tests found': 'TEST_DISCOVERY',
     'FAILURES!!!': 'JUNIT_FAILURES',
+    'Native Back did not exit or traverse internal history': 'NATIVE_BACK_NO_NAVIGATION',
+    'Remote Back navigated outside local host': 'NATIVE_BACK_UNSAFE_ORIGIN',
+    'Remote QA JavaScript callback timed out': 'NATIVE_BACK_JS_CALLBACK',
     'INSTRUMENTATION_FAILED': 'INSTRUMENTATION_FRAMEWORK',
 }
 PROBLEMS = (
