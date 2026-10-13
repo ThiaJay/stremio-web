@@ -20,6 +20,8 @@ for required in (
     "__nativeQaDocumentToken===undefined",
     "REMOTE_RELOAD_MOUNTED", "REMOTE_HOME_MOUNTED",
     "REMOTE_HOME_ANONYMOUS", "REMOTE_EXIT_CONFIRMED",
+    "BACK_PRE_DISPATCH", "BACK_REMOTE_EVENT_RETURNED",
+    "waitForBackIndex", "view.copyBackForwardList().getCurrentIndex()",
     "BACK_SAFE_INTERNAL_NAVIGATION", "BACK_EXIT_CONFIRMED",
 ):
     assert required in test, "Missing native remote acceptance gate " + required
