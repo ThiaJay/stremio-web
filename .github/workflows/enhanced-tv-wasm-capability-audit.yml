@@ -1,0 +1,224 @@
+name: Stremio Core pinned WASM compatibility audit
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/enhanced-tv-wasm-capability-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-wasm-features:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source without retained credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Audit pinned Core WASM using only standard offline tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export WASM_PATH="$RUNNER_TEMP/pinned-stremio-core.wasm"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, tarfile
+
+          root = Path.cwd()
+          provenance = json.loads((root/'vendor/core-web/provenance.json').read_text())
+          assert provenance['coreSourceSha']=='303d7c0bb8bd6d55f11f2f751e55e66040da4f8c'
+          assert provenance['tarballName']=='stremio-stremio-core-web-0.65.0.tgz'
+          archive=root/'vendor/core-web'/provenance['tarballName']
+          assert archive.is_file() and archive.stat().st_size < 3_000_000
+          assert hashlib.sha256(archive.read_bytes()).hexdigest()==provenance['sha256']
+          with tarfile.open(archive,mode='r:gz') as tar:
+              names=[member for member in tar.getmembers()
+                     if member.isfile() and member.name.endswith('/stremio_core_web_bg.wasm')]
+              assert len(names)==1 and names[0].size < 12_000_000
+              f=tar.extractfile(names[0])
+              assert f is not None
+              wasm=f.read()
+          assert 100_000<len(wasm)<12_000_000 and wasm[:8]==b'\0asm\1\0\0\0'
+
+          def uleb(data, i):
+              result=0
+              for shift in range(0,35,7):
+                  if i>=len(data): raise ValueError('Truncated WASM section')
+                  b=data[i];i+=1
+                  result|=(b&127)<<shift
+                  if not b&128:return result,i
+              raise ValueError('Oversized section length')
+          def name(data,i):
+              length,i=uleb(data,i)
+              if length>len(data)-i:raise ValueError('Invalid name length')
+              return bytes(data[i:i+length]).decode('utf-8'),i+length
+
+          features=None
+          offset=8
+          while offset<len(wasm):
+              kind=wasm[offset];offset+=1
+              size,offset=uleb(wasm,offset)
+              assert size<=len(wasm)-offset
+              part=memoryview(wasm)[offset:offset+size]
+              offset+=size
+              if kind!=0:continue
+              name_value,i=name(part,0)
+              if name_value!='target_features':continue
+              assert features is None
+              length,i=uleb(part,i)
+              assert length<100
+              found=[]
+              for _ in range(length):
+                  assert i<len(part)
+                  sign=chr(part[i]);i+=1
+                  item,i=name(part,i)
+                  assert sign in '+-' and 0<len(item)<64
+                  found.append((sign,item))
+              assert i==len(part)
+              features=found
+
+          allow={'mutable-globals','sign-ext','bulk-memory','reference-types',
+                 'simd128','relaxed-simd','atomics','multivalue',
+                 'nontrapping-fptoint','exception-handling','extended-const',
+                 'tail-call','multimemory','multi-memory','memory64','gc',
+                 'typed-funcref','wide-arithmetic','call-indirect-overlong',
+                 'bulk-memory-opt','multivalue','nontrapping-fptoint','fp16'}
+          assert features is None or all(item in allow for _,item in features),(
+              'UNRECOGNISED_TARGET_FEATURE_REQUIRES_REVIEW')
+          print('PINNED_CORE_ARCHIVE_HASH_PASS')
+          print('PINNED_CORE_WASM_CONTAINER_PASS')
+          if features is None:
+              print('PINNED_CORE_TARGET_FEATURE_SECTION_ABSENT')
+          else:
+              print('PINNED_CORE_TARGET_FEATURE_SECTION_PRESENT')
+              for sign,item in sorted(features):
+                  print('PINNED_CORE_TARGET_FEATURE_'+
+                        ('ENABLED_' if sign=='+' else 'DISABLED_')+
+                        item.upper().replace('-','_'))
+          # Isolated runner path is never published as an artifact.
+          Path(os.environ['WASM_PATH']).write_bytes(wasm)
+          PY
+          node - <<'JS'
+          const fs=require('fs');
+          const bytes=fs.readFileSync(process.env.WASM_PATH);
+          WebAssembly.compile(bytes).then(
+            ()=>{console.log('PINNED_CORE_WASM_NODE22_COMPILE_PASS')},
+            ()=>{console.log('PINNED_CORE_WASM_NODE22_COMPILE_FAIL');process.exitCode=2}
+          );
+          JS
+          rm -f "$WASM_PATH"
+          echo PINNED_CORE_WASM_STATIC_FEATURE_AUDIT_COMPLETE
+
+
+  stock-api30-webview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact source without retained credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Android SDK and KVM on disposable runner
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Inspect stock Android 11 TV WebView version without installing an application
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo STOCK_API30_HOLD_NO_KVM; exit 2; }
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            sudo chgrp "$(id -gn)" /dev/kvm
+            sudo chmod g+rw /dev/kvm
+          fi
+          test -r /dev/kvm && test -w /dev/kvm
+          sdkmanager --install emulator >/dev/null
+          image="$(sdkmanager --list |
+            grep -Eo 'system-images;android-30;android-tv;(x86|x86_64)' |
+            sort -Vu | tail -1 || true)"
+          [[ -n "$image" ]] || { echo STOCK_API30_HOLD_IMAGE_UNAVAILABLE; exit 2; }
+          sdkmanager --install "$image" >/dev/null
+          if avdmanager list device -c | grep -Fxq tv_1080p; then
+            tv=tv_1080p
+          elif avdmanager list device -c | grep -Fxq tv_720p; then
+            tv=tv_720p
+          else
+            echo STOCK_API30_HOLD_NO_TV_PROFILE; exit 2
+          fi
+          avd_root="$HOME/.android/avd"
+          mkdir -p "$avd_root"
+          avd_dir="$avd_root/stock_api30_probe.avd"
+          if ! printf 'no\n' | avdmanager create avd -n stock_api30_probe \
+            -k "$image" -d "$tv" -p "$avd_dir" --force >/tmp/stock-api30-avd-private.log 2>&1; then
+            echo STOCK_API30_HOLD_AVD_CREATE; exit 2
+          fi
+          if [[ -s "$avd_dir/config.ini" && ! -e "$avd_root/stock_api30_probe.ini" ]]; then
+            abi="$(printf '%s' "$image" | cut -d';' -f4)"
+            if [[ -s "$ANDROID_HOME/system-images/android-30/android-tv/$abi/system.img" ]]; then
+              printf 'avd.ini.encoding=UTF-8\npath=%s\npath.rel=avd/stock_api30_probe.avd\ntarget=android-30\n' \
+                "$avd_dir" >"$avd_root/stock_api30_probe.ini"
+              echo STOCK_API30_EPHEMERAL_AVD_INDEX_REPAIRED
+            fi
+          fi
+          "$ANDROID_HOME/emulator/emulator" -list-avds |
+            grep -Fxq stock_api30_probe || {
+              echo STOCK_API30_HOLD_AVD_UNREGISTERED; exit 2;
+            }
+          "$ANDROID_HOME/emulator/emulator" -avd stock_api30_probe \
+             -no-window -no-audio -no-boot-anim -no-snapshot \
+             -gpu swiftshader_indirect -accel on -wipe-data \
+             >/tmp/stock-api30-emulator-private.log 2>&1 &
+          emulator_pid=$!
+          cleanup() {
+            local old=$?
+            trap - EXIT
+            timeout --kill-after=2s 8s adb emu kill >/dev/null 2>&1 || true
+            if kill -0 "$emulator_pid" 2>/dev/null; then
+              kill -TERM "$emulator_pid" >/dev/null 2>&1 || true
+              for _ in 1 2 3 4 5; do
+                kill -0 "$emulator_pid" 2>/dev/null || break
+                sleep 1
+              done
+              kill -KILL "$emulator_pid" >/dev/null 2>&1 || true
+            fi
+            wait "$emulator_pid" >/dev/null 2>&1 || true
+            echo STOCK_API30_EMULATOR_CLEANED
+            return "$old"
+          }
+          trap cleanup EXIT
+          if ! timeout 210 bash -c 'until
+            adb devices | grep -q "emulator-[0-9]*[[:space:]]*device" &&
+            [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" == 1 ]]
+          do sleep 3; done'; then
+            echo STOCK_API30_HOLD_BOOT_TIMEOUT; exit 2
+          fi
+          sdk="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+          [[ "$sdk" == 30 ]] || { echo STOCK_API30_HOLD_WRONG_GUEST_API; exit 2; }
+          adb shell dumpsys webviewupdate |
+            python3 -c '
+          import re,sys
+          raw=sys.stdin.read()
+          m=re.search(r"Current WebView package \(name, version\): \(([^,()]+),\s*(\d+)\.",raw)
+          if not m:
+              print("STOCK_API30_WEBVIEW_UNKNOWN")
+              sys.exit(2)
+          package,major=m.group(1),int(m.group(2))
+          if package not in ("com.android.webview","com.google.android.webview",
+                             "com.android.chrome","com.google.android.apps.chrome"):
+              print("STOCK_API30_WEBVIEW_UNEXPECTED_PROVIDER")
+              sys.exit(2)
+          if 1<=major<96:
+              print("STOCK_API30_CHROMIUM_BELOW_96_REFERENCE_TYPES_GATE")
+          elif 96<=major<112:
+              print("STOCK_API30_CHROMIUM_96_TO_111")
+          elif 112<=major<=200:
+              print("STOCK_API30_CHROMIUM_112_PLUS")
+          else:
+              print("STOCK_API30_WEBVIEW_VERSION_OUT_OF_RANGE")
+              sys.exit(2)
+          '
+          echo STOCK_API30_READ_ONLY_WEBVIEW_VERSION_PROBE_PASS
