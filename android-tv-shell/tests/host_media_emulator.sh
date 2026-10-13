@@ -116,6 +116,15 @@ if ! grep -Eq 'OK \(3 tests\)' "$result_file" || \
   # Read only fixed test names, expected test counts and allowlisted synthetic
   # failure labels. NEVER echo raw UI hierarchy, URL, stack or worker state.
   python3 android-tv-shell/tests/diagnose_core_route.py "$result_file"
+  # Read the disposable Android emulator tag into a local file only.
+  # The allowlist printer cannot publish private logcat content.
+  stage_file='/tmp/enhanced-core-stages-private.txt'
+  if timeout 10 adb logcat -d -s EnhancedCoreQA:I '*:S' > "$stage_file" 2>/dev/null; then
+    python3 android-tv-shell/tests/report_core_stages.py "$stage_file"
+  else
+    echo 'HOSTQA_CORE_STAGE_CAPTURE_UNAVAILABLE'
+  fi
+  rm -f "$stage_file"
   echo 'HOSTQA_FAIL_ONE_OR_MORE_INSTRUMENTATION_ACCEPTANCE_TESTS'
   exit 1
 fi

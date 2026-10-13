@@ -35,6 +35,7 @@ jobs:
           set -euo pipefail
           bash -n android-tv-shell/tests/host_media_emulator.sh
           python3 android-tv-shell/tests/diagnose_core_route.py --self-test
+          python3 android-tv-shell/tests/report_core_stages.py --self-test
       - name: Install pnpm
         uses: pnpm/action-setup@v6.1.0
         with:
@@ -189,8 +190,22 @@ jobs:
           test -r /dev/kvm && test -w /dev/kvm || exit 2
       - name: Exercise original media in the real Enhanced TV WebView
         if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-core-route-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-core-route-qa-20261013-v1'
+        id: android_emulator_acceptance
         shell: bash
         run: timeout --signal=TERM --kill-after=10s 540s bash android-tv-shell/tests/host_media_emulator.sh
+      - name: Publish asynchronous CI completion checkpoint
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Stremio Enhanced Android TV acceptance'
+            echo "Exact checked checkout SHA $GITHUB_SHA"
+            echo "GitHub Actions run https://github.com/ThiaJay/stremio-web/actions/runs/$GITHUB_RUN_ID"
+            echo "Emulator test outcome ${{ steps.android_emulator_acceptance.outcome }}"
+            echo 'Release status HELD'
+            echo 'Successful compilation does not establish approved Fire TV playback.'
+            echo 'On failure use fixed anonymous QA stage markers. No personal data is published.'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Clear disposable media and instrumentation receipt
         if: always()
         shell: bash

@@ -2,6 +2,7 @@ package org.thiajay.stremioenhanced.tv;
 
 import android.app.Activity;
 import android.app.Instrumentation;
+import android.util.Log;
 import android.content.Intent;
 import android.view.KeyEvent;
 import android.view.View;
@@ -24,6 +25,10 @@ import static org.junit.Assert.*;
  */
 @RunWith(AndroidJUnit4.class)
 public final class EnhancedCoreRouteInstrumentedTest {
+    // Fixed anonymous test checkpoints. No URLs, accounts, video or UI data.
+    private static void stage(String code) {
+        Log.i("EnhancedCoreQA", "CORE_QA_STAGE_" + code);
+    }
     private static WebView findWebView(View view) {
         if (view instanceof WebView) return (WebView) view;
         if (view instanceof ViewGroup) {
@@ -76,15 +81,18 @@ public final class EnhancedCoreRouteInstrumentedTest {
                 findWebView(activity.getWindow().getDecorView())));
             WebView view=target.get();
             assertNotNull("Real Enhanced Android TV WebView absent",view);
+            stage("WEBVIEW_PRESENT");
             assertTrue("Original Enhanced React application not mounted",
                 waitFor(instrument,view,
                     "location.origin==='https://appassets.androidplatform.net' && " +
                     "location.pathname==='/assets/web/index.html' && " +
                     "Boolean(document.getElementById('app')?.children.length>0)",70000));
+            stage("ENHANCED_REACT_MOUNTED");
 
             assertEquals("true",evaluate(instrument,view,
                 "(()=>{const e=document.createElement('script');" +
                 "e.src='/assets/web/qa-core-route.js';document.head.appendChild(e);return true})()"));
+            stage("QA_SCRIPT_REQUESTED");
             assertTrue("Anonymous Core cannot encode a local stream. State "+problem(instrument,view),
                 waitFor(instrument,view,
                     "window.__coreRouteQa?.ready===true || " +
@@ -93,8 +101,10 @@ public final class EnhancedCoreRouteInstrumentedTest {
             assertEquals("Core route preflight failed","\"none\"",problem(instrument,view));
             assertEquals("true",evaluate(instrument,view,
                 "window.__coreRouteQa?.anonymous===true"));
+            stage("CORE_ANONYMOUS_ENCODED");
             assertEquals("true",evaluate(instrument,view,
                 "document.activeElement?.id==='enhanced-core-route-start'"));
+            stage("QA_BUTTON_FOCUSED");
 
             // Native focus can move from WebView to the four TV toolbar buttons
             // after Core boot. Re-establish both Android and DOM focus before
@@ -121,13 +131,17 @@ public final class EnhancedCoreRouteInstrumentedTest {
                     "window.__coreRouteQa?.gesture===true",4000);
             }
             assertTrue("Real D-pad did not initiate Player navigation",started);
+            stage("REMOTE_KEY_ACCEPTED");
             assertTrue("React Player hash route never mounted",
                 waitFor(instrument,view,"window.__coreRouteQa?.route===true",12000));
+            stage("PLAYER_ROUTE_REACHED");
             assertTrue("Actual Core Player model and selected stream not ready",
                 waitFor(instrument,view,"window.__coreRouteQa?.coreSelected===true",40000));
+            stage("CORE_PLAYER_SELECTED");
             assertTrue("Real Player HTMLVideo never loaded original local stream",
                 waitFor(instrument,view,
                     "window.__coreRouteQa?.videoFound===true",30000));
+            stage("PLAYER_VIDEO_FOUND");
 
             // First try the genuine source-selection user gesture without
             // changing WebView media requirements.
@@ -151,12 +165,14 @@ public final class EnhancedCoreRouteInstrumentedTest {
             }
 
             assertEquals("Core route failure","\"none\"",problem(instrument,view));
+            stage("VIDEO_FRAME_DECODED");
             assertEquals("true",evaluate(instrument,view,
                 "window.__coreRouteQa?.coreSelected===true"));
             assertEquals("true",evaluate(instrument,view,
                 "window.__coreRouteQa?.finished===true"));
             assertEquals("true",evaluate(instrument,view,
                 "Boolean(document.getElementById('app')?.children.length>0)"));
+            stage("CORE_ROUTE_COMPLETE");
         } finally {
             instrument.runOnMainSync(activity::finish);
         }
