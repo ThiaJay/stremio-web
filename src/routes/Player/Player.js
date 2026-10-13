@@ -48,6 +48,7 @@ const getSkipSegmentTarget = require('./getSkipSegmentTarget');
 const getSkipSegmentPopupOpen = require('./getSkipSegmentPopupOpen');
 const shouldAutoSkipSegment = require('./shouldAutoSkipSegment');
 const enhancedSkipModes = require('./enhancedSkipModes');
+const nativeMedia3Handoff = require('./nativeMedia3Handoff');
 const createSkipSegmentAttempt = require('./createSkipSegmentAttempt');
 const commitSkipSegment = require('./commitSkipSegment');
 
@@ -86,6 +87,19 @@ const Player = () => {
     const streamingServer = useStreamingServer();
     const statistics = useStatistics(player, streamingServer);
     const video = useVideo();
+    const nativeMedia3Available = React.useMemo(() => nativeMedia3Handoff.bridgeForWindow(
+        typeof window !== 'undefined' ? window : null) !== null, []);
+    const nativeMedia3Url = React.useMemo(() => nativeMedia3Handoff.eligibleUrl(
+        player.stream?.content, player.stream?.type === 'Ready', player.selected?.stream),
+    [player.stream, player.selected]);
+    const onNativeMedia3Requested = React.useCallback(() => {
+        if (nativeMedia3Url && nativeMedia3Handoff.requestNativePlayback(
+            nativeMedia3Handoff.bridgeForWindow(typeof window !== 'undefined' ? window : null),
+            nativeMedia3Url)) {
+            // Stop competing Web audio; native closing leaves Web paused until the viewer resumes.
+            video.setPaused(true);
+        }
+    }, [nativeMedia3Url, video.setPaused]);
     const [nightAudioPreferences, setNightAudioPreferences] = React.useState(() =>
         nightAudioSettings.readState(getNightAudioStorage()));
     const [nightAudioSaved, setNightAudioSaved] = React.useState(true);
@@ -1197,6 +1211,20 @@ const Player = () => {
                 onClick={onVideoClick}
                 onDoubleClick={onVideoDoubleClick}
             />
+            {
+                nativeMedia3Available && nativeMedia3Url !== null && !casting ?
+                    <button className={styles['native-media3-action']}
+                        type={'button'} onClick={onNativeMedia3Requested}
+                        aria-label={t('ENHANCED_NATIVE_TV_PLAY', {
+                            defaultValue: 'Try native Android TV playback (experimental)'
+                        })}>
+                        {t('ENHANCED_NATIVE_TV_PLAY', {
+                            defaultValue: 'Try native Android TV playback (experimental)'
+                        })}
+                    </button>
+                    :
+                    null
+            }
             {
                 !video.state.loaded ?
                     <div className={classnames(styles['layer'], styles['background-layer'])}>
