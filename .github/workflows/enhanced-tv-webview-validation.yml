@@ -50,7 +50,7 @@ jobs:
           if(deps['@stremio/stremio-core-web']!=='file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz')throw Error('Unknown Core package');
           const sourceByCandidate = Object.freeze({
             'feature/enhanced-tv-webview-20261012-v1': 'github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687',
-            'feature/enhanced-tv-htmlvideo-night-audio-20261012-v1': 'github:ThiaJay/stremio-video#cdf2ba7b0a0a3ffe100c0da810d271e750d72a28'
+            'feature/enhanced-tv-htmlvideo-night-audio-20261012-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
           });
           const candidate = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
           if (!Object.hasOwn(sourceByCandidate, candidate)) throw Error('Unrecognised TV candidate branch');
