@@ -3,6 +3,7 @@ package org.thiajay.stremioenhanced.tv;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -28,6 +29,10 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public final class EnhancedHostMediaInstrumentedTest {
     private static final int WAIT_MS = 75000;
+    // Only fixed, anonymous instrumentation milestones are written to logcat.
+    private static void stage(String code) {
+        Log.i("EnhancedCoreQA", "CORE_QA_STAGE_" + code);
+    }
 
     private static WebView findWebView(View view) {
         if (view instanceof WebView) return (WebView) view;
@@ -76,6 +81,7 @@ public final class EnhancedHostMediaInstrumentedTest {
                 target.set(findWebView(activity.getWindow().getDecorView())));
             WebView webView = target.get();
             assertNotNull("Actual Enhanced TV host WebView is absent", webView);
+            stage("HOST_WEBVIEW_PRESENT");
 
             assertTrue("Actual embedded Enhanced React app did not mount",
                 awaitBoolean(instrumentation, webView,
@@ -83,6 +89,7 @@ public final class EnhancedHostMediaInstrumentedTest {
                     "location.pathname==='/assets/web/index.html' && " +
                     "Boolean(document.getElementById('app')?.children.length > 0)",
                     WAIT_MS));
+            stage("HOST_REACT_MOUNTED");
 
             byte[] bytes;
             try (InputStream input = instrumentation.getContext().getAssets()
@@ -106,23 +113,33 @@ public final class EnhancedHostMediaInstrumentedTest {
             assertTrue("Original locally generated video metadata was not accepted",
                 awaitBoolean(instrumentation, webView,
                     "window.__enhancedHostQa?.ready===true", 30000));
-            assertTrue("Synthetic start button has no WebView keyboard focus",
+            stage("HOST_READY");
+            // Restore native and HTML focus after the asynchronous React boot.
+            // A genuine remote key still has to initiate playback.
+            instrumentation.runOnMainSync(webView::requestFocus);
+            assertTrue("Host QA start control cannot receive WebView keyboard focus",
                 awaitBoolean(instrumentation, webView,
-                    "document.activeElement?.id==='enhanced-host-qa-start'", 5000));
+                    "(()=>{const b=document.getElementById('enhanced-host-qa-start');" +
+                    "if(!b||b.disabled)return false;b.focus();return document.activeElement===b})()",
+                    5000));
+            stage("HOST_BUTTON_FOCUSED");
 
             // Real hardware-key dispatch to a focused HTML button, not .click().
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
             assertTrue("Real D-pad gesture did not reach the WebView",
                 awaitBoolean(instrumentation, webView,
                     "window.__enhancedHostQa?.gesture===true", 6000));
+            stage("HOST_REMOTE_KEY_ACCEPTED");
             assertTrue("Actual decoded video frames or compressed PCM unverified",
                 awaitBoolean(instrumentation, webView,
                     "window.__enhancedHostQa?.video===true && " +
                     "window.__enhancedHostQa?.audio===true", 22000));
+            stage("HOST_MEDIA_PCM_VERIFIED");
             assertEquals("true", evaluate(instrumentation, webView,
                 "window.__enhancedHostQa?.error===false"));
             assertEquals("true", evaluate(instrumentation, webView,
                 "Boolean(document.getElementById('app')?.children.length > 0)"));
+            stage("HOST_TEST_COMPLETE");
         } finally {
             instrumentation.runOnMainSync(activity::finish);
         }
