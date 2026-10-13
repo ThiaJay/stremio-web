@@ -102,18 +102,17 @@ public final class EnhancedCoreRouteInstrumentedTest {
             assertEquals("true",evaluate(instrument,view,
                 "window.__coreRouteQa?.anonymous===true"));
             stage("CORE_ANONYMOUS_ENCODED");
-            assertEquals("true",evaluate(instrument,view,
-                "document.activeElement?.id==='enhanced-core-route-start'"));
-            stage("QA_BUTTON_FOCUSED");
 
             // Native focus can move from WebView to the four TV toolbar buttons
             // after Core boot. Re-establish both Android and DOM focus before
-            // delivering genuine remote keys. Never call button.click().
+            // checking focus and delivering genuine remote keys.
+            // Never call button.click() or bypass the real key gesture.
             instrument.runOnMainSync(view::requestFocus);
             assertEquals("QA start control lost focus to the Android toolbar",
                 "true",evaluate(instrument,view,
                     "(()=>{let b=document.getElementById('enhanced-core-route-start');" +
                     "b.focus();return document.activeElement===b})()"));
+            stage("QA_BUTTON_FOCUSED");
             Thread.sleep(350);
             instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
             boolean started=waitFor(instrument,view,
