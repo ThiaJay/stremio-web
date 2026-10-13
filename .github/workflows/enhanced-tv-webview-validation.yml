@@ -50,7 +50,8 @@ jobs:
           if(deps['@stremio/stremio-core-web']!=='file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz')throw Error('Unknown Core package');
           const sourceByCandidate = Object.freeze({
             'feature/enhanced-tv-webview-20261012-v1': 'github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687',
-            'feature/enhanced-tv-htmlvideo-night-audio-20261012-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
+            'feature/enhanced-tv-htmlvideo-night-audio-20261012-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66',
+            'feature/enhanced-tv-original-media-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
           });
           const candidate = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
           if (!Object.hasOwn(sourceByCandidate, candidate)) throw Error('Unrecognised TV candidate branch');
@@ -116,4 +117,65 @@ jobs:
           unzip -t "$apk" >/dev/null
           sha256sum "$apk"
           echo 'SOURCE_ONLY_PREVIEW_BUILT: NOT INSTALLED, NOT RELEASED, NOT TESTED WITH AN ACCOUNT OR ON TV.'
+      - name: Generate temporary original media for the actual Enhanced host
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e android-tv-shell/app/src/main/assets/web/qa-local.mp4
+          fixture='android-tv-shell/app/src/debug/assets/web/qa-local.mp4'
+          if git ls-files --error-unmatch "$fixture" >/dev/null 2>&1; then
+            echo 'HOSTQA_REJECT_COMMITTED_TEST_MEDIA'; exit 1
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          mkdir -p "$(dirname "$fixture")"
+          ffmpeg -nostdin -hide_banner -loglevel error \
+            -f lavfi -i 'testsrc2=duration=5:size=320x180:rate=15' \
+            -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=5' \
+            -c:v libx264 -preset ultrafast -threads 2 -pix_fmt yuv420p \
+            -c:a aac -b:a 96k -movflags +faststart -shortest -y "$fixture"
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          path=pathlib.Path('android-tv-shell/app/src/debug/assets/web/qa-local.mp4')
+          assert 15000 < path.stat().st_size < 4000000
+          result=subprocess.run(['ffprobe','-v','error','-of','json','-show_streams',
+               '-show_format',str(path)],check=True,text=True,capture_output=True,timeout=15)
+          data=json.loads(result.stdout)
+          codecs={(stream.get('codec_type'),stream.get('codec_name')) for stream in data['streams']}
+          assert ('video','h264') in codecs and ('audio','aac') in codecs
+          assert 3 <= float(data['format']['duration']) <= 8
+          print('HOSTQA_ORIGINAL_MEDIA_CODEC_AND_DURATION_PASS')
+          PY
+      - name: Bundle exact pinned StremioVideo backend for test-only instrumentation
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec webpack --config android-tv-shell/tests/video_qa.webpack.config.cjs --mode production --stats errors-only
+          python3 android-tv-shell/tests/audit_real_engine_qa.py
+      - name: Assemble separate actual-host instrumentation test APK
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        run: gradle -p android-tv-shell :app:assembleDebug :app:assembleAndroidTest --no-daemon --stacktrace
+      - name: Enable runner KVM for temporary television emulator
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo 'HOSTQA_BLOCKED_NO_KVM'; exit 2; }
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            sudo chgrp "$(id -gn)" /dev/kvm
+            sudo chmod g+rw /dev/kvm
+          fi
+          test -r /dev/kvm && test -w /dev/kvm || exit 2
+      - name: Exercise original media in the real Enhanced TV WebView
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        shell: bash
+        run: timeout --signal=TERM --kill-after=10s 540s bash android-tv-shell/tests/host_media_emulator.sh
+      - name: Clear disposable media and instrumentation receipt
+        if: always()
+        shell: bash
+        run: |
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
+          rm -f /tmp/enhanced-hostqa-instrumentation-private.txt
 # Deliberately no artifact uploads, Pages deployment, releases, signing or device connection.

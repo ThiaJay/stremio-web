@@ -1,0 +1,4 @@
+# CI generates original media only within its disposable runner.
+app/src/main/assets/sample.mp4
+**/build/
+.gradle/
