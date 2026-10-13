@@ -19,6 +19,8 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import androidx.annotation.OptIn;
+import androidx.media3.common.util.UnstableApi;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -33,6 +35,7 @@ import java.io.ByteArrayInputStream;
  * No native account bridge, secrets, external intents, autoplay, telemetry or
  * cross-process watched-state mutations. Native playback is NOT yet accepted.
  */
+@OptIn(markerClass = UnstableApi.class)
 public final class EnhancedTvActivity extends Activity {
     private WebView webView;
     private LinearLayout root;
