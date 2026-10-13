@@ -39,6 +39,65 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - name: Check anonymous subtitle instrumentation source and reporting
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n android-tv-shell/tests/host_media_emulator.sh
+          python3 android-tv-shell/tests/classify_emulator_adb.py --self-test
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('android-tv-shell/tests/host_media_emulator.sh').read_text()
+          for token in (
+              'HOSTQA_BLOCKED_ADB_UNAUTHORIZED',
+              'HOSTQA_BLOCKED_UNEXPECTED_ADB_DEVICE',
+              'HOSTQA_ADB_HOST_RECONNECT_ONCE',
+              'HOSTQA_BLOCKED_BOOT_TIMEOUT',
+              'adb -s "$serial" install -r',
+              'OK \\(3 tests\\)'
+          ):
+              assert token in source,token
+          assert 'GITHUB_ACTIONS' in source and 'classify_emulator_adb.py' in source
+          print('HOSTQA_ADB_AUTHORISATION_FAIL_CLOSED_CONTRACT_PASS')
+          PY
+          python3 android-tv-shell/tests/report_subtitle_qa.py --self-test
+          python3 - <<'PY'
+          from pathlib import Path
+          java=Path('android-tv-shell/app/src/androidTest/java/org/thiajay/stremioenhanced/tv/EnhancedSubtitleInstrumentedTest.java').read_text()
+          shell=Path('android-tv-shell/tests/host_media_emulator.sh').read_text()
+          parser=Path('android-tv-shell/tests/report_subtitle_qa.py').read_text()
+          assert 'captureSafeState(instrumentation, observedView.get())' in java
+          assert 'SUBTITLE_QA_FLAG_' in java and 'SUBTITLE_QA_STAGE_' in java
+          assert 'report_subtitle_qa.py --stages' in shell
+          assert 'HOSTQA_JUNIT_FAILURE_UNATTRIBUTED' in parser
+          assert '--engine-stages' in parser and '--engine-stages' in shell
+          engine=Path('android-tv-shell/app/src/androidTest/java/org/thiajay/stremioenhanced/tv/EnhancedEngineInstrumentedTest.java').read_text()
+          assert 'captureFixedState(instrument, checkedView.get())' in engine
+          assert 'ENGINE_QA_STAGE_' in engine and 'ENGINE_QA_FLAG_' in engine
+          print('HOSTQA_SUBTITLE_FAILURE_DIAGNOSTIC_CONTRACT_PASS')
+          PY
+          python3 -m py_compile android-tv-shell/tests/audit_subtitle_runtime_qa.py
+          node --check android-tv-shell/tests/subtitle_runtime_qa.js
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('android-tv-shell/tests/subtitle_runtime_qa.js').read_text()
+          policy_audit=Path('android-tv-shell/tests/audit_subtitle_runtime_qa.py').read_text()
+          # The actual pinned HTML subtitle renderer is driven by observed
+          # Video playback-time props; VTT bytes alone cannot render a cue.
+          assert "'time','paused','buffering','playbackSpeed'" in source
+          assert "'time','paused','buffering','playbackSpeed'" in policy_audit
+          print('HOSTQA_SUBTITLE_RENDER_CLOCK_OBSERVATION_CONTRACT_PASS')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          configuration=Path('android-tv-shell/tests/video_qa.webpack.config.cjs').read_text()
+          old_audit=Path('android-tv-shell/tests/audit_real_engine_qa.py').read_text()
+          new_audit=Path('android-tv-shell/tests/audit_subtitle_runtime_qa.py').read_text()
+          for token in ('devtool:false','clean:false'):
+              assert token in configuration and token in old_audit, token
+          assert "'devtool:false' in webpack" in new_audit
+          print('HOSTQA_EARLY_SHARED_VIDEO_AUDIT_CONTRACT_PASS')
+          PY
       - name: Check official and customised Core and Video source pinning
         shell: bash
         run: |
@@ -51,7 +110,8 @@ jobs:
           const sourceByCandidate = Object.freeze({
             'feature/enhanced-tv-webview-20261012-v1': 'github:ThiaJay/stremio-video#a5ef2c6729d74a39f0096422365633d18cf5a687',
             'feature/enhanced-tv-htmlvideo-night-audio-20261012-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66',
-            'feature/enhanced-tv-original-media-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
+            'feature/enhanced-tv-original-media-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66',
+            'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1': 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66'
           });
           const candidate = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
           if (!Object.hasOwn(sourceByCandidate, candidate)) throw Error('Unrecognised TV candidate branch');
@@ -118,7 +178,7 @@ jobs:
           sha256sum "$apk"
           echo 'SOURCE_ONLY_PREVIEW_BUILT: NOT INSTALLED, NOT RELEASED, NOT TESTED WITH AN ACCOUNT OR ON TV.'
       - name: Generate temporary original media for the actual Enhanced host
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1'
         shell: bash
         run: |
           set -euo pipefail
@@ -148,17 +208,18 @@ jobs:
           print('HOSTQA_ORIGINAL_MEDIA_CODEC_AND_DURATION_PASS')
           PY
       - name: Bundle exact pinned StremioVideo backend for test-only instrumentation
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1'
         shell: bash
         run: |
           set -euo pipefail
           pnpm exec webpack --config android-tv-shell/tests/video_qa.webpack.config.cjs --mode production --stats errors-only
           python3 android-tv-shell/tests/audit_real_engine_qa.py
+          python3 android-tv-shell/tests/audit_subtitle_runtime_qa.py
       - name: Assemble separate actual-host instrumentation test APK
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1'
         run: gradle -p android-tv-shell :app:assembleDebug :app:assembleAndroidTest --no-daemon --stacktrace
       - name: Enable runner KVM for temporary television emulator
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1'
         shell: bash
         run: |
           set -euo pipefail
@@ -169,13 +230,28 @@ jobs:
           fi
           test -r /dev/kvm && test -w /dev/kvm || exit 2
       - name: Exercise original media in the real Enhanced TV WebView
-        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.head_ref == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-subtitle-runtime-qa-20261013-v1'
+        id: subtitle_emulator_acceptance
         shell: bash
         run: timeout --signal=TERM --kill-after=10s 540s bash android-tv-shell/tests/host_media_emulator.sh
+      - name: Preserve unattended subtitle emulator result
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Stremio Enhanced subtitle emulator acceptance'
+            echo "Exact source SHA $GITHUB_SHA"
+            echo "Run https://github.com/ThiaJay/stremio-web/actions/runs/$GITHUB_RUN_ID"
+            echo "Subtitle emulator gate ${{ steps.subtitle_emulator_acceptance.outcome }}"
+            echo 'Private development source and ephemeral debug APK, unreleased.'
+            echo 'No account, external stream or physical Fire TV testing is claimed.'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Clear disposable media and instrumentation receipt
         if: always()
         shell: bash
         run: |
           rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
           rm -f /tmp/enhanced-hostqa-instrumentation-private.txt
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-subtitles.js
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-video-engine.js
 # Deliberately no artifact uploads, Pages deployment, releases, signing or device connection.
