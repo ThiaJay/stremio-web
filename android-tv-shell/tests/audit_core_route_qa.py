@@ -24,6 +24,24 @@ for forbidden in ('core.dispatch(', 'window.localStorage',
                   'https://stream', 'https://api.',
                   'setMediaPlaybackRequiresUserGesture(false)'):
     assert forbidden not in code, forbidden
+
+# Diagnostic capability checks must run only after actual anonymous Core failure.
+# Never use substitute Core objects, external URLs or raw platform logging.
+for required in ("void diagnoseCoreBootstrap()", "WebAssembly.compile(bytes)",
+                 "new Worker(workerPath)", "const wasmPath=prefix+",
+                 "credentials:'omit',redirect:'error'", "state.coreProbe=p",
+                 "if(!core){fail('core-unavailable');void diagnoseCoreBootstrap();return;}"):
+    assert required in code, required
+java=(tv/'app/src/androidTest/java/org/thiajay/stremioenhanced/tv/'
+      'EnhancedCoreRouteInstrumentedTest.java').read_text(encoding='utf-8')
+report=(tv/'tests/report_core_stages.py').read_text(encoding='utf-8')
+import re
+stage_codes=set(re.findall(r'"(PROBE_[A-Z0-9_]+)"',java))
+assert len(stage_codes)>=25
+assert all("'" + marker + "'" in report for marker in stage_codes)
+assert 'WebView.getCurrentWebViewPackage()' in java
+assert 'if ("\\"core-unavailable\\"".equals(preflight))' in java
+
 source=tv/'app/src/debug/assets/web/qa-core-route.js'
 assert source.is_file() and source.read_bytes()==code.encode('utf-8')
 assert not (tv/'app/src/main/assets/web/qa-core-route.js').exists()
