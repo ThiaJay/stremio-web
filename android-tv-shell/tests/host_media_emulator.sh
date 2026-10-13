@@ -58,11 +58,32 @@ fi
  -gpu swiftshader_indirect -no-snapshot -accel on -wipe-data \
  >/tmp/enhanced-hostqa-emulator.log 2>&1 &
 emulator_pid=$!
+# The previous run proved decoded video and compressed PCM, then hung in
+# Android emulator shutdown until GitHub cancelled the job. Keep teardown
+# strictly bounded and do not report acceptance before it has completed.
 cleanup() {
-  adb emu kill >/dev/null 2>&1 || true
-  kill "$emulator_pid" >/dev/null 2>&1 || true
+  local prior_status=$?
+  trap - EXIT
+  timeout --kill-after=2s 8s adb emu kill >/dev/null 2>&1 || true
+  if kill -0 "$emulator_pid" 2>/dev/null; then
+    kill -TERM "$emulator_pid" >/dev/null 2>&1 || true
+    for attempt in 1 2 3 4 5; do
+      if ! kill -0 "$emulator_pid" 2>/dev/null; then break; fi
+      sleep 1
+    done
+    if kill -0 "$emulator_pid" 2>/dev/null; then
+      kill -KILL "$emulator_pid" >/dev/null 2>&1 || true
+    fi
+  fi
   wait "$emulator_pid" >/dev/null 2>&1 || true
+  rm -f /tmp/enhanced-hostqa-instrumentation-private.txt
   rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
+  if kill -0 "$emulator_pid" 2>/dev/null; then
+    echo "HOSTQA_FAIL_EMULATOR_TEARDOWN"
+    return 1
+  fi
+  echo "HOSTQA_EMULATOR_TEARDOWN_COMPLETE"
+  return "$prior_status"
 }
 trap cleanup EXIT
 if ! timeout 240 bash -c 'until
@@ -95,6 +116,7 @@ if ! grep -Eq 'OK \(1 test\)' "$result_file" || \
   echo 'HOSTQA_FAIL_MEDIA_DECODE_OR_PCM_NOT_ACCEPTED'
   exit 1
 fi
-rm -f "$result_file"
+# A passing test is not a passing workflow until the emulator has exited.
+cleanup
 echo 'HOSTQA_ACTUAL_ENHANCED_HOST_H264_AAC_AND_PCM_PASS'
 echo 'HOSTQA_ORIGINAL_EMULATOR_FIXTURE_NO_ACCOUNT_NO_DEVICE_NO_RELEASE'
