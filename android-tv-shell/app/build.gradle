@@ -26,5 +26,12 @@ android {
 }
 dependencies {
     implementation 'androidx.webkit:webkit:1.14.0'
+    // Exact Media3 version from existing tested Video PR5 native companion.
+    implementation 'androidx.media3:media3-common:1.11.1'
+    implementation 'androidx.media3:media3-exoplayer:1.11.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.11.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.11.1'
+    implementation 'androidx.media3:media3-datasource:1.11.1'
+    implementation 'androidx.media3:media3-ui:1.11.1'
     testImplementation 'junit:junit:4.13.2'
 }
