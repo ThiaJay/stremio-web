@@ -89,7 +89,69 @@ public final class EnhancedCoreRouteInstrumentedTest {
         }
     }
 
-    @Test(timeout=175000)
+
+    // This diagnostic runs only after Core is already known to have failed.
+    // Report only fixed classifications, never raw browser versions or values.
+    private static void classifyProbe(Instrumentation instrument, WebView view,
+                                      String field, String... allowedPairs) throws Exception {
+        String code=evaluate(instrument,view,
+            "window.__coreRouteQa?.coreProbe?." + field);
+        for(int i=0;i+1<allowedPairs.length;i+=2){
+            if(("\u0022"+allowedPairs[i]+"\u0022").equals(code)){
+                stage(allowedPairs[i+1]);
+                return;
+            }
+        }
+        stage("PROBE_UNCLASSIFIED");
+    }
+
+    private static void reportCoreWorkerProbe(Instrumentation instrument,WebView view)
+            throws Exception {
+        int major=0;
+        try {
+            android.content.pm.PackageInfo pkg=WebView.getCurrentWebViewPackage();
+            if(pkg!=null&&pkg.versionName!=null)
+                major=Integer.parseInt(pkg.versionName.split("\\.")[0]);
+        }catch(RuntimeException ignored){major=0;}
+        if(major<=0)stage("PROBE_WEBVIEW_VERSION_UNKNOWN");
+        else if(major<90)stage("PROBE_WEBVIEW_BELOW_90");
+        else if(major<110)stage("PROBE_WEBVIEW_90_TO_109");
+        else if(major<130)stage("PROBE_WEBVIEW_110_TO_129");
+        else stage("PROBE_WEBVIEW_130_PLUS");
+
+        if(!waitFor(instrument,view,
+            "window.__coreRouteQa?.coreProbe?.done===true",25000)){
+            stage("PROBE_TIMEOUT");return;
+        }
+        classifyProbe(instrument,view,"workerApi",
+            "present","PROBE_WORKER_API_PRESENT","missing","PROBE_WORKER_API_MISSING");
+        classifyProbe(instrument,view,"wasmApi",
+            "present","PROBE_WASM_API_PRESENT","missing","PROBE_WASM_API_MISSING");
+        classifyProbe(instrument,view,"bundle",
+            "verified","PROBE_BUNDLE_VERIFIED","missing","PROBE_BUNDLE_MISSING",
+            "error","PROBE_BUNDLE_ERROR");
+        classifyProbe(instrument,view,"workerAsset",
+            "present","PROBE_WORKER_ASSET_PRESENT","missing","PROBE_WORKER_ASSET_MISSING",
+            "unknown","PROBE_WORKER_ASSET_UNTESTED");
+        classifyProbe(instrument,view,"workerLaunch",
+            "script-error","PROBE_WORKER_SCRIPT_ERROR",
+            "constructor-error","PROBE_WORKER_CONSTRUCTOR_ERROR",
+            "no-immediate-error","PROBE_WORKER_NO_IMMEDIATE_ERROR",
+            "unknown","PROBE_WORKER_UNTESTED");
+        classifyProbe(instrument,view,"wasmAsset",
+            "present","PROBE_WASM_ASSET_PRESENT","missing","PROBE_WASM_ASSET_MISSING",
+            "invalid-size","PROBE_WASM_ASSET_INVALID_SIZE",
+            "unknown","PROBE_WASM_ASSET_UNTESTED");
+        classifyProbe(instrument,view,"wasmMime",
+            "correct","PROBE_WASM_MIME_CORRECT","other","PROBE_WASM_MIME_OTHER",
+            "unknown","PROBE_WASM_MIME_UNTESTED");
+        classifyProbe(instrument,view,"wasmCompile",
+            "pass","PROBE_WASM_COMPILE_PASS","fail","PROBE_WASM_COMPILE_FAIL",
+            "timeout","PROBE_WASM_COMPILE_TIMEOUT",
+            "unknown","PROBE_WASM_COMPILE_UNTESTED");
+    }
+
+    @Test(timeout=215000)
     public void fullAnonymousCorePlayerRouteAcceptsOriginalMedia() throws Exception {
         Instrumentation instrument=InstrumentationRegistry.getInstrumentation();
         Intent launch=new Intent(instrument.getTargetContext(),EnhancedTvActivity.class);
@@ -120,6 +182,10 @@ public final class EnhancedCoreRouteInstrumentedTest {
                     "window.__coreRouteQa?.problem!=='none')",58000));
             String preflight=problem(instrument,view);
             if (!"\"none\"".equals(preflight)) reportPreflightReason(preflight);
+            if ("\"core-unavailable\"".equals(preflight)) {
+                try { reportCoreWorkerProbe(instrument,view); }
+                catch(Exception | AssertionError ignored) { stage("PROBE_UNAVAILABLE"); }
+            }
             assertEquals("Core route preflight failed","\"none\"",preflight);
             assertEquals("true",evaluate(instrument,view,
                 "window.__coreRouteQa?.anonymous===true"));
