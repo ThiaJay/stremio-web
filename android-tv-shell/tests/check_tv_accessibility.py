@@ -25,6 +25,10 @@ def verify_toolbar(raw):
     app_node_count = 0
     native_button_count = 0
     expected_label_count = 0
+    accessible_descriptions = set()
+    # Android widget themes may render button text in upper case.
+    # Canonical expected names still come from our fixed native labels.
+    normalised_labels = {label.casefold(): label for label in BUTTONS}
     # Fixed four-bit diagnostics only. Never include XML attribute values.
     # The bit order is description, clickable, focusable, enabled.
     candidate_fields = {name: (False, False, False, False) for name in BUTTONS}
@@ -35,7 +39,11 @@ def verify_toolbar(raw):
         if node.attrib.get('class') != 'android.widget.Button':
             continue
         native_button_count += 1
-        name = node.attrib.get('text')
+        visual_text = (node.attrib.get('text') or '').strip()
+        name = normalised_labels.get(visual_text.casefold())
+        native_description = node.attrib.get('content-desc')
+        if native_description in BUTTONS:
+            accessible_descriptions.add(native_description)
         if name in BUTTONS:
             expected_label_count += 1
             flags = (
@@ -59,7 +67,11 @@ def verify_toolbar(raw):
     if native_button_count == 0:
         raise ValueError('APP_HAS_NO_VISIBLE_NATIVE_BUTTON_NODES')
     if expected_label_count == 0:
-        raise ValueError('EXPECTED_NATIVE_BUTTON_LABELS_NOT_IN_HIERARCHY')
+        # Report only which of the four fixed labels was present as a native
+        # accessibility description, never any other UI text or identifiers.
+        diagnostic = ('_KNOWN_DESCRIPTIONS_' + '_'.join(sorted(accessible_descriptions)).upper()
+                      if accessible_descriptions else '')
+        raise ValueError('EXPECTED_NATIVE_BUTTON_LABELS_NOT_IN_HIERARCHY' + diagnostic)
     missing = BUTTONS - observed
     if missing:
         # Only known labels and boolean bits. Never echo the raw XML or text.
