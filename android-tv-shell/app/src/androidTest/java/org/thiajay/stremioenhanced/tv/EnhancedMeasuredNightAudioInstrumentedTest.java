@@ -89,11 +89,26 @@ public final class EnhancedMeasuredNightAudioInstrumentedTest {
             assertTrue("MEASURED_NIGHT_QA_BUTTON_NOT_FOCUSED",
                 waitFor(instrumentation, realView,
                     "document.activeElement?.id==='enhanced-measured-night-start'", 5000));
-            instrumentation.runOnMainSync(realView::requestFocus);
-            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
+            assertEquals("MEASURED_NIGHT_QA_ERROR_BEFORE_INPUT", "true",
+                evaluate(instrumentation, realView,
+                    "window.__enhancedMeasuredNightQa?.error===false"));
+            // Some Android TV emulator builds deliver the first key to the
+            // WebView focus owner rather than the already focused HTML button.
+            // Restore focus only, never call .click(), autoplay or dispatchEvent.
+            boolean trustedRemotePressObserved = false;
+            for (int attempt = 0; attempt < 2 && !trustedRemotePressObserved; attempt++) {
+                instrumentation.runOnMainSync(realView::requestFocus);
+                assertEquals("MEASURED_NIGHT_QA_HTML_BUTTON_FOCUS_LOST", "true",
+                    evaluate(instrumentation, realView,
+                        "(()=>{const b=document.getElementById('enhanced-measured-night-start');" +
+                        "if(!b || b.disabled)return false;b.focus();" +
+                        "return document.activeElement===b})()"));
+                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
+                trustedRemotePressObserved = waitFor(instrumentation, realView,
+                    "window.__enhancedMeasuredNightQa?.gesture===true", 5000);
+            }
             assertTrue("MEASURED_NIGHT_QA_NO_TRUSTED_REMOTE_GESTURE",
-                waitFor(instrumentation, realView,
-                    "window.__enhancedMeasuredNightQa?.gesture===true", 6000));
+                trustedRemotePressObserved);
             final boolean fullyMeasured = waitFor(instrumentation, realView,
                 "window.__enhancedMeasuredNightQa?.complete===true", 25000);
             if (!fullyMeasured) {
