@@ -147,6 +147,13 @@ jobs:
           assert 3 <= float(data['format']['duration']) <= 8
           print('HOSTQA_ORIGINAL_MEDIA_CODEC_AND_DURATION_PASS')
           PY
+      - name: Bundle exact pinned StremioVideo backend for test-only instrumentation
+        if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec webpack --config android-tv-shell/tests/video_qa.webpack.config.cjs --mode production --stats errors-only
+          python3 android-tv-shell/tests/audit_real_engine_qa.py
       - name: Assemble separate actual-host instrumentation test APK
         if: github.head_ref == 'feature/enhanced-tv-original-media-qa-20261013-v1' || github.ref_name == 'feature/enhanced-tv-original-media-qa-20261013-v1'
         run: gradle -p android-tv-shell :app:assembleDebug :app:assembleAndroidTest --no-daemon --stacktrace
