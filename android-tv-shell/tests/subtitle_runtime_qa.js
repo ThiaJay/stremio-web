@@ -84,8 +84,15 @@ const policy = require('../../src/routes/Player/enhancedSubtitlePolicy.js');
             manifest.commands?.includes('addExtraSubtitlesTracks') &&
             manifest.props?.includes('selectedExtraSubtitlesTrackId');
         if (state.backend) {
-            engine.dispatch({type:'observeProp',propName:'extraSubtitlesTracks'});
-            engine.dispatch({type:'observeProp',propName:'selectedExtraSubtitlesTrackId'});
+            // The pinned withHTMLSubtitles renderer advances cue time only
+            // from observed underlying Video props. Without these observers
+            // it receives VTT bytes but has no playback clock for display.
+            for (const propName of [
+                'time','paused','buffering','playbackSpeed',
+                'extraSubtitlesTracks','selectedExtraSubtitlesTrackId'
+            ]) {
+                engine.dispatch({type:'observeProp',propName});
+            }
         }
     });
     engine.on('propValue', onProp);

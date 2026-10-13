@@ -103,6 +103,38 @@ def analyse_stages(log):
     out.append('HOSTQA_SUBTITLE_OBSERVATIONS_END')
     return out
 
+ENGINE_STAGES=(
+    'WEBVIEW_PRESENT','ENHANCED_REACT_MOUNTED','SCRIPT_REQUESTED',
+    'SCRIPT_READY','VIDEO_BACKEND_READY','REMOTE_FOCUSED',
+    'REMOTE_GESTURE_ACCEPTED','VIDEO_NIGHT_AUDIO_CONFIRMED',
+    'APP_REMAINED_MOUNTED','ENGINE_QA_COMPLETE',
+    'STATE_CAPTURE_UNAVAILABLE',
+)
+ENGINE_FLAGS=('READY','GESTURE','BACKEND','VIDEO','AUDIOACTIVE','AUDIOOFF','ERROR')
+
+def analyse_engine_stages(log):
+    if not isinstance(log,str) or len(log)>MAX_SIZE:
+        raise ValueError('Engine observations missing or oversized')
+    found=set()
+    for line in log.splitlines():
+        if not re.search(r'\bEnhancedEngineQA\b',line):
+            continue
+        for stage in ENGINE_STAGES:
+            if re.search(r'\bENGINE_QA_STAGE_'+re.escape(stage)+r'\b',line):
+                found.add('STAGE_'+stage)
+        for flag in ENGINE_FLAGS:
+            if re.search(r'\bENGINE_QA_FLAG_'+re.escape(flag)+r'\b',line):
+                found.add('FLAG_'+flag)
+    out=['HOSTQA_ENGINE_OBSERVATIONS_BEGIN']
+    out.extend('HOSTQA_ENGINE_'+token for token in (
+        *('STAGE_'+x for x in ENGINE_STAGES),
+        *('FLAG_'+x for x in ENGINE_FLAGS),
+    ) if token in found)
+    if not found:
+        out.append('HOSTQA_ENGINE_NO_ALLOWLISTED_OBSERVATIONS')
+    out.append('HOSTQA_ENGINE_OBSERVATIONS_END')
+    return out
+
 def self_test():
     status=(
         'INSTRUMENTATION_STATUS: class=org.sample.EnhancedHostMediaInstrumentedTest\n'
@@ -138,7 +170,18 @@ def self_test():
     assert 'HOSTQA_SUBTITLE_FLAG_CUEVISIBLE' in c
     assert 'HOSTQA_SUBTITLE_STAGE_APP_REMAINED_MOUNTED' not in c
     assert 'private.invalid' not in c and 'SECRET' not in c
-    print('HOSTQA_SUBTITLE_TEST_AND_STAGE_ALLOWLIST_SELF_TEST_PASS')
+    engine=(
+        'I EnhancedEngineQA: ENGINE_QA_STAGE_REMOTE_GESTURE_ACCEPTED '
+        'https://private.invalid/?token=DO_NOT_PRINT\n'
+        'I EnhancedEngineQA: ENGINE_QA_FLAG_VIDEO\n'
+        'I DifferentApp: ENGINE_QA_FLAG_AUDIOOFF\n'
+    )
+    d='\n'.join(analyse_engine_stages(engine))
+    assert 'HOSTQA_ENGINE_STAGE_REMOTE_GESTURE_ACCEPTED' in d
+    assert 'HOSTQA_ENGINE_FLAG_VIDEO' in d
+    assert 'HOSTQA_ENGINE_FLAG_AUDIOOFF' not in d
+    assert 'private.invalid' not in d and 'DO_NOT_PRINT' not in d
+    print('HOSTQA_SUBTITLE_ENGINE_TEST_STAGE_ALLOWLIST_SELF_TEST_PASS')
 
 def load(path):
     p=Path(path)
@@ -153,5 +196,7 @@ if __name__=='__main__':
         print('\n'.join(analyse(load(sys.argv[1]))))
     elif len(sys.argv)==3 and sys.argv[1]=='--stages':
         print('\n'.join(analyse_stages(load(sys.argv[2]))))
+    elif len(sys.argv)==3 and sys.argv[1]=='--engine-stages':
+        print('\n'.join(analyse_engine_stages(load(sys.argv[2]))))
     else:
         raise SystemExit('HOSTQA_SUBTITLE_TEST_RESULT_ARGS_REJECTED')

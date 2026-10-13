@@ -70,10 +70,24 @@ jobs:
           assert 'SUBTITLE_QA_FLAG_' in java and 'SUBTITLE_QA_STAGE_' in java
           assert 'report_subtitle_qa.py --stages' in shell
           assert 'HOSTQA_JUNIT_FAILURE_UNATTRIBUTED' in parser
+          assert '--engine-stages' in parser and '--engine-stages' in shell
+          engine=Path('android-tv-shell/app/src/androidTest/java/org/thiajay/stremioenhanced/tv/EnhancedEngineInstrumentedTest.java').read_text()
+          assert 'captureFixedState(instrument, checkedView.get())' in engine
+          assert 'ENGINE_QA_STAGE_' in engine and 'ENGINE_QA_FLAG_' in engine
           print('HOSTQA_SUBTITLE_FAILURE_DIAGNOSTIC_CONTRACT_PASS')
           PY
           python3 -m py_compile android-tv-shell/tests/audit_subtitle_runtime_qa.py
           node --check android-tv-shell/tests/subtitle_runtime_qa.js
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('android-tv-shell/tests/subtitle_runtime_qa.js').read_text()
+          policy_audit=Path('android-tv-shell/tests/audit_subtitle_runtime_qa.py').read_text()
+          # The actual pinned HTML subtitle renderer is driven by observed
+          # Video playback-time props; VTT bytes alone cannot render a cue.
+          assert "'time','paused','buffering','playbackSpeed'" in source
+          assert "'time','paused','buffering','playbackSpeed'" in policy_audit
+          print('HOSTQA_SUBTITLE_RENDER_CLOCK_OBSERVATION_CONTRACT_PASS')
+          PY
           python3 - <<'PY'
           from pathlib import Path
           configuration=Path('android-tv-shell/tests/video_qa.webpack.config.cjs').read_text()

@@ -174,9 +174,11 @@ report_subtitle_failure() {
     echo 'HOSTQA_TEST_RESULT_PARSER_UNAVAILABLE'
   local stage_file='/tmp/enhanced-subtitleqa-stage-private.txt'
   rm -f "$stage_file"
-  if timeout 10s adb -s "$serial" logcat -d -s EnhancedSubtitleQA:I '*:S' > "$stage_file" 2>/dev/null; then
+  if timeout 10s adb -s "$serial" logcat -d -s EnhancedSubtitleQA:I EnhancedEngineQA:I '*:S' > "$stage_file" 2>/dev/null; then
     python3 android-tv-shell/tests/report_subtitle_qa.py --stages "$stage_file" ||
       echo 'HOSTQA_SUBTITLE_STAGE_PARSER_UNAVAILABLE'
+    python3 android-tv-shell/tests/report_subtitle_qa.py --engine-stages "$stage_file" ||
+      echo 'HOSTQA_ENGINE_STAGE_PARSER_UNAVAILABLE'
   else
     echo 'HOSTQA_SUBTITLE_STAGE_CAPTURE_UNAVAILABLE'
   fi

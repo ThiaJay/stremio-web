@@ -20,6 +20,7 @@ for required in ("require('@stremio/stremio-video')",
                  'requestVideoFrameCallback', "qa-local.mp4",
                  "credentials:'omit'", "selectedExtraSubtitlesTrackId",
                  'container.textContent', 'trackLoaded', 'restoredOff',
+                 "'time','paused','buffering','playbackSpeed'",
                  'ORIGINAL_QA_ENGLISH_SUBTITLE'):
     assert required in source,required
 for forbidden in ('window.core', 'window.localStorage', 'window.sessionStorage',
