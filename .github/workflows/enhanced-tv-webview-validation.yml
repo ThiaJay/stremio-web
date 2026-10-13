@@ -29,6 +29,12 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Preflight Core route diagnostic script before compiling Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n android-tv-shell/tests/host_media_emulator.sh
+          python3 android-tv-shell/tests/diagnose_core_route.py --self-test
       - name: Install pnpm
         uses: pnpm/action-setup@v6.1.0
         with:
