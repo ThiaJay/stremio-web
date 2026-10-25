@@ -14,6 +14,8 @@ env:
   CORE_WEB_PACKAGE: '0.65.0'
   PINNED_NIGHTLY: nightly-2026-10-24
   WASM_BINDGEN_VERSION: '0.2.121'
+  WASM_TOOLS_VERSION: '1.262.0'
+  WASM_TOOLS_X86_64_LINUX_SHA256: '655b8df67d54c3ef9b52fc237c4e94bbfbb5f5f43825245cb0940a7002a9ed65'
 
 jobs:
   pinned-wasm-features:
@@ -277,7 +279,9 @@ jobs:
             local old=$?
             trap - EXIT
             rm -rf "$src" "$out" "$private_log" \
-              "$RUNNER_TEMP/wasm-bindgen-cli"
+              "$RUNNER_TEMP/wasm-bindgen-cli" \
+              "$RUNNER_TEMP/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux" \
+              "$RUNNER_TEMP/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux.tar.gz"
             echo MVP_BUILD_DISPOSABLE_STATE_REMOVED
             return "$old"
           }
@@ -331,6 +335,27 @@ jobs:
           }
           echo PINNED_WASM_BINDGEN_PASS
 
+          wasm_tools_archive="$RUNNER_TEMP/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux.tar.gz"
+          if ! curl --fail --silent --show-error --location --retry 3 \
+              --proto '=https' \
+              "https://github.com/bytecodealliance/wasm-tools/releases/download/v${WASM_TOOLS_VERSION}/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux.tar.gz" \
+              --output "$wasm_tools_archive"; then
+            echo HOLD_PINNED_WASM_TOOLS_DOWNLOAD
+            exit 2
+          fi
+          printf '%s  %s\\n' "$WASM_TOOLS_X86_64_LINUX_SHA256" "$wasm_tools_archive" | \
+            sha256sum --check --status || {
+              echo HOLD_PINNED_WASM_TOOLS_HASH
+              exit 2
+            }
+          tar --extract --gzip --file "$wasm_tools_archive" --directory "$RUNNER_TEMP"
+          export PATH="$RUNNER_TEMP/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux:$PATH"
+          test "$(wasm-tools --version | awk '{print $2}')" = "$WASM_TOOLS_VERSION" || {
+            echo HOLD_WASM_TOOLS_VERSION_MISMATCH
+            exit 2
+          }
+          echo PINNED_WASM_TOOLS_PASS
+
           export CARGO_INCREMENTAL=0
           export RUSTFLAGS="-Ctarget-cpu=mvp --remap-path-prefix=$src=/stremio-core"
           if ! cargo +"$PINNED_NIGHTLY" build \
@@ -362,6 +387,12 @@ jobs:
               exit 2
             }
           echo MVP_BINDGEN_PASS
+
+          if ! wasm-tools validate --features=mvp "$out/stremio_core_web_bg.wasm"; then
+            echo HOLD_MVP_BYTECODE_VALIDATION
+            exit 2
+          fi
+          echo MVP_BYTECODE_VALIDATION_PASS
 
           export MVP_WASM="$out/stremio_core_web_bg.wasm"
           python3 - <<'PY'
