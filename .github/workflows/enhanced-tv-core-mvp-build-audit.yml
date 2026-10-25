@@ -1,6 +1,11 @@
 name: Enhanced TV exact Core MVP build audit
 
 on:
+  push:
+    branches:
+      - 'feature/enhanced-tv-core-mvp-build-audit-20261025-v1'
+    paths:
+      - '.github/workflows/enhanced-tv-core-mvp-build-audit.yml'
   pull_request:
     paths:
       - '.github/workflows/enhanced-tv-core-mvp-build-audit.yml'
