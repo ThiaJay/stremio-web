@@ -359,6 +359,7 @@ jobs:
           export CARGO_INCREMENTAL=0
           export RUSTFLAGS="-Ctarget-cpu=mvp --remap-path-prefix=$src=/stremio-core"
           if ! cargo +"$PINNED_NIGHTLY" build \
+              --locked \
               --manifest-path "$src/Cargo.toml" \
               -Zbuild-std=panic_abort,std \
               --target wasm32-unknown-unknown \
