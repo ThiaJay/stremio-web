@@ -67,7 +67,9 @@ jobs:
           rustc "+$RUST_NIGHTLY" --version --verbose
           cargo "+$RUST_NIGHTLY" --version --verbose
           rustup component list --toolchain "$RUST_NIGHTLY" --installed |
-            grep -Fxq 'rust-src-x86_64-unknown-linux-gnu'
+            grep -Eq '^rust-src-x86_64-unknown-linux-gnu( \(installed\))?$'
+          rustup target list --toolchain "$RUST_NIGHTLY" --installed |
+            grep -Fxq 'wasm32-unknown-unknown'
           echo CORE_MVP_PINNED_NIGHTLY_AND_RUST_SRC_PASS
 
       - name: Install the lockfile-matched wasm-bindgen CLI
