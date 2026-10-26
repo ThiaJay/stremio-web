@@ -222,3 +222,159 @@ jobs:
               sys.exit(2)
           '
           echo STOCK_API30_READ_ONLY_WEBVIEW_VERSION_PROBE_PASS
+
+  source-qualified-core-mvp-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CORE_SOURCE_SHA: 303d7c0bb8bd6d55f11f2f751e55e66040da4f8c
+      RUST_NIGHTLY: nightly-2026-09-04
+      WASM_BINDGEN_VERSION: 0.2.121
+    steps:
+      - name: Checkout the exact genuine Core source without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ThiaJay/stremio-core
+          ref: 303d7c0bb8bd6d55f11f2f751e55e66040da4f8c
+          path: core
+          persist-credentials: false
+
+      - name: Bind source and build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C core rev-parse HEAD)" = "$CORE_SOURCE_SHA"
+          test "$(git -C core hash-object stremio-core-web/Cargo.toml)" = \
+            44878d4ef9f8523cfe198b3a74256d0f3a57faae
+          test "$(git -C core hash-object stremio-core-web/scripts/build.sh)" = \
+            7d0f9ebbf770b09fa34285d0fde8702e95e17b11
+          test "$(git -C core hash-object Cargo.lock)" = \
+            b2a1e17f54aa57357302e7424211a5a611117208
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          lock=Path('core/Cargo.lock').read_text(encoding='utf-8')
+          match=re.search(r'\[\[package\]\]\nname = "wasm-bindgen"\nversion = "([^"]+)"',lock)
+          assert match and match.group(1)=='0.2.121', match.group(1) if match else None
+          PY
+          grep -Fxq 'channel = "1.95"' core/stremio-core-web/rust-toolchain.toml
+          grep -Fq 'wasm-pack build --no-typescript --no-pack' \
+            core/stremio-core-web/scripts/build.sh
+          echo CORE_MVP_EXACT_SOURCE_BINDING_PASS
+
+      - name: Install a pinned nightly with rust-src for a rebuilt standard library
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install "$RUST_NIGHTLY" --profile minimal \
+            --component rust-src --target wasm32-unknown-unknown
+          rustc "+$RUST_NIGHTLY" --version --verbose
+          cargo "+$RUST_NIGHTLY" --version --verbose
+          rustup component list --toolchain "$RUST_NIGHTLY" --installed |
+            grep -Eq '^rust-src-x86_64-unknown-linux-gnu( \(installed\))?$'
+          rustup target list --toolchain "$RUST_NIGHTLY" --installed |
+            grep -Fxq 'wasm32-unknown-unknown'
+          echo CORE_MVP_PINNED_NIGHTLY_AND_RUST_SRC_PASS
+
+      - name: Install the lockfile-matched wasm-bindgen CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CARGO_INSTALL_ROOT="$RUNNER_TEMP/wasm-bindgen-cli"
+          cargo "+$RUST_NIGHTLY" install --locked wasm-bindgen-cli \
+            --version "$WASM_BINDGEN_VERSION" --root "$CARGO_INSTALL_ROOT"
+          "$CARGO_INSTALL_ROOT/bin/wasm-bindgen" --version |
+            grep -Fxq "wasm-bindgen $WASM_BINDGEN_VERSION"
+          echo "$CARGO_INSTALL_ROOT/bin" >> "$GITHUB_PATH"
+          echo CORE_MVP_LOCKFILE_MATCHED_WASM_BINDGEN_PASS
+
+      - name: Rebuild std and genuine Core for the WebAssembly MVP baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR="$RUNNER_TEMP/core-mvp-target"
+          export RUSTFLAGS="-Ctarget-cpu=mvp -Ctarget-feature=+mutable-globals -Cremap-path-prefix=$GITHUB_WORKSPACE=/source"
+          cargo "+$RUST_NIGHTLY" build \
+            --locked --release --target wasm32-unknown-unknown \
+            -Zbuild-std=panic_abort,std \
+            --manifest-path core/stremio-core-web/Cargo.toml
+          input="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/stremio_core_web.wasm"
+          test -s "$input"
+          mkdir -p "$RUNNER_TEMP/core-mvp-bindgen"
+          wasm-bindgen "$input" --target web --no-typescript \
+            --out-dir "$RUNNER_TEMP/core-mvp-bindgen" --out-name stremio_core_web
+          test -s "$RUNNER_TEMP/core-mvp-bindgen/stremio_core_web_bg.wasm"
+          echo CORE_MVP_GENUINE_SOURCE_BUILD_PASS
+
+      - name: Require a reference-types-free generated module
+        shell: bash
+        env:
+          WASM_PATH: ${{ runner.temp }}/core-mvp-bindgen/stremio_core_web_bg.wasm
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          wasm=Path(os.environ['WASM_PATH']).read_bytes()
+          assert 100_000 < len(wasm) < 12_000_000
+          assert wasm[:8] == b'\0asm\1\0\0\0'
+
+          def uleb(data,index):
+              value=0
+              for shift in range(0,35,7):
+                  assert index < len(data)
+                  byte=data[index]; index+=1
+                  value |= (byte & 127) << shift
+                  if not byte & 128:
+                      return value,index
+              raise AssertionError('oversized ULEB')
+
+          def name(data,index):
+              size,index=uleb(data,index)
+              assert size <= len(data)-index
+              return bytes(data[index:index+size]).decode('utf-8'),index+size
+
+          features=[]
+          index=8
+          while index < len(wasm):
+              kind=wasm[index]; index+=1
+              size,index=uleb(wasm,index)
+              assert size <= len(wasm)-index
+              section=memoryview(wasm)[index:index+size]; index+=size
+              if kind != 0:
+                  continue
+              section_name,cursor=name(section,0)
+              if section_name != 'target_features':
+                  continue
+              count,cursor=uleb(section,cursor)
+              assert count < 100
+              for _ in range(count):
+                  assert cursor < len(section)
+                  sign=chr(section[cursor]); cursor+=1
+                  feature,cursor=name(section,cursor)
+                  assert sign in '+-'
+                  features.append((sign,feature))
+              assert cursor == len(section)
+
+          enabled={feature for sign,feature in features if sign=='+'}
+          forbidden={'reference-types','gc','typed-funcref','memory64',
+                     'exception-handling','tail-call','multimemory','multi-memory'}
+          assert not enabled.intersection(forbidden), sorted(enabled.intersection(forbidden))
+          print('CORE_MVP_TARGET_FEATURES_BOUND_PASS')
+          print('CORE_MVP_REFERENCE_TYPES_ABSENT_PASS')
+          PY
+          node - <<'JS'
+          const fs=require('fs');
+          const bytes=fs.readFileSync(process.env.WASM_PATH);
+          WebAssembly.compile(bytes).then(
+            ()=>console.log('CORE_MVP_NODE22_COMPILE_PASS'),
+            ()=>{console.log('CORE_MVP_NODE22_COMPILE_FAIL');process.exitCode=2;}
+          );
+          JS
+          rm -rf "$RUNNER_TEMP/core-mvp-target" "$RUNNER_TEMP/core-mvp-bindgen"
+          echo CORE_MVP_EPHEMERAL_OUTPUT_REMOVED
+
+# Feasibility evidence only. Never upload, publish, sign or install this output.
+# A pass does not establish API30, Amazon Chromium, Core/Player, remote, media,
+# physical Fire TV, licensing-review, rollback, distribution or release acceptance.
