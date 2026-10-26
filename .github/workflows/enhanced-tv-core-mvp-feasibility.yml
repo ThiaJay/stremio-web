@@ -1,6 +1,11 @@
 name: Genuine Core MVP compatibility build feasibility
 
 on:
+  push:
+    branches:
+      - feature/enhanced-tv-core-mvp-feasibility-20261026-v1
+    paths:
+      - '.github/workflows/enhanced-tv-core-mvp-feasibility.yml'
   pull_request:
     paths:
       - '.github/workflows/enhanced-tv-core-mvp-feasibility.yml'
