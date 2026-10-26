@@ -1,6 +1,11 @@
 name: Stremio Core pinned WASM compatibility audit
 
 on:
+  push:
+    branches:
+      - 'feature/enhanced-tv-core-mvp-feasibility-20261026-v1'
+    paths:
+      - '.github/workflows/enhanced-tv-wasm-capability-audit.yml'
   pull_request:
     paths:
       - '.github/workflows/enhanced-tv-wasm-capability-audit.yml'
@@ -11,6 +16,7 @@ permissions:
 
 jobs:
   pinned-wasm-features:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -114,6 +120,7 @@ jobs:
 
 
   stock-api30-webview:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
