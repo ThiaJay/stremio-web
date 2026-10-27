@@ -53,7 +53,9 @@ jobs:
           for(const [path,marker] of [
             ['src/routes/Player/Player.js','enhancedSkipModes.resolveMode'],
             ['src/routes/Player/useSubtitles.ts','enhancedSubtitlePolicy.decide'],
+            ['src/routes/Player/useSubtitles.ts','readPlayerSubtitleAutomation'],
             ['src/routes/Player/useAudio.ts','enhancedSubtitlePolicy.preferredAudioTrack'],
+            ['src/routes/Player/useAudio.ts','readPlayerSubtitleAutomation'],
             ['src/routes/Settings/Player/Player.tsx','<EnhancedSubtitlePreferences />']
           ]) if(!fs.readFileSync(path,'utf8').includes(marker)) throw Error('Missing integrated source: '+path);
           console.log('Web source identity, Core bundle, Video dependency and feature adapters verified');
@@ -65,7 +67,7 @@ jobs:
           node --test tests/subtitleProvenanceTypes.node.mjs tests/subtitlePreferenceStoreTypes.node.mjs
           pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --types node tests/subtitle-provenance-types/globals.d.mts tests/subtitle-provenance-types/preference-provenance.type-test.mts tests/subtitle-provenance-types/preference-store.type-test.mts tests/subtitle-provenance-types/preference-settings-write.type-test.mts
       - name: Run installation-local subtitle preference storage regressions
-        run: node --test tests/subtitlePreferenceStore.node.mjs tests/subtitlePreferenceSettingsWrite.node.mjs
+        run: node --test tests/subtitlePreferenceStore.node.mjs tests/subtitlePreferenceSettingsWrite.node.mjs tests/subtitlePreferencePlayerGate.node.mjs
       - name: Run Enhanced smart subtitle and skip policy regressions
         run: node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
       - name: Run existing Web regression suite

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import enhancedSubtitlePolicy = require('./enhancedSubtitlePolicy');
+import { PLAYER_STORAGE_KEYS, readPlayerSubtitleAutomation } from './intelligentSubtitles/preference-player-gate.mjs';
 import { useTranslation } from 'react-i18next';
 import { CONSTANTS, getKeyboardShortcutKeys, languages, useFileDropListener, useInterval, useShortcut, useTimeout, useToast } from 'stremio/common';
 import {
@@ -194,12 +195,14 @@ const useSubtitles = ({
     const trackSelectionLocked = useRef(false);
     const [enhancedOptions, setEnhancedOptions] = useState(() =>
         enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+    const [enhancedStorageRevision, setEnhancedStorageRevision] = useState(0);
     const [pictureChoice, setPictureChoice] = useState<'unknown' | 'confirmed' | 'notPresent'>('unknown');
     useEffect(() => {
         if (typeof window === 'undefined') return undefined;
         const refresh = (event: StorageEvent) => {
-            if (event.key === null || event.key === enhancedSubtitlePolicy.STORAGE_KEY) {
+            if (event.key === null || PLAYER_STORAGE_KEYS.includes(event.key)) {
                 setEnhancedOptions(enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+                setEnhancedStorageRevision((revision) => revision + 1);
             }
         };
         window.addEventListener('storage', refresh);
@@ -444,22 +447,30 @@ const useSubtitles = ({
         }
     }, [player.subtitlePreference, setSubtitlesTrack, setExtraSubtitlesTrack]);
 
-    const enhancedDecision = useMemo(() => enhancedSubtitlePolicy.decide({
+    const enhancedAutomation = useMemo(() => readPlayerSubtitleAutomation({
+        storage: enhancedSubtitlePolicy.currentStorage(),
         options: enhancedOptions,
-        streamReady: video.state.stream !== null && video.state.loaded === true,
-        manualSubtitlePreference: player.subtitlePreference !== null && player.subtitlePreference !== undefined,
-        manualAudioPreference: player.audioPreference !== null && player.audioPreference !== undefined,
-        audioTracks: video.state.audioTracks,
-        selectedAudioTrackId: video.state.selectedAudioTrackId,
-        embeddedTracks: video.state.subtitlesTracks,
-        externalTracks: video.state.extraSubtitlesTracks,
-        pictureEvidence: {
-            sourceName: player.selected?.stream?.name,
-            verifiedByViewer: pictureChoice === 'confirmed',
-            userDismissedHint: pictureChoice === 'notPresent',
-        },
-    }), [
-        enhancedOptions, player.subtitlePreference, player.audioPreference,
+    }), [enhancedOptions, enhancedStorageRevision]);
+    const enhancedDecision = useMemo(() => enhancedAutomation.subtitle ?
+        enhancedSubtitlePolicy.decide({
+            options: enhancedOptions,
+            streamReady: video.state.stream !== null && video.state.loaded === true,
+            manualSubtitlePreference: player.subtitlePreference !== null && player.subtitlePreference !== undefined,
+            manualAudioPreference: player.audioPreference !== null && player.audioPreference !== undefined,
+            audioTracks: video.state.audioTracks,
+            selectedAudioTrackId: video.state.selectedAudioTrackId,
+            embeddedTracks: video.state.subtitlesTracks,
+            externalTracks: video.state.extraSubtitlesTracks,
+            pictureEvidence: {
+                sourceName: player.selected?.stream?.name,
+                verifiedByViewer: pictureChoice === 'confirmed',
+                userDismissedHint: pictureChoice === 'notPresent',
+            },
+        })
+        :
+        { action: 'inherit', reason: 'installation_preference_unverified', picture: 'unknown' }, [
+        enhancedAutomation.subtitle, enhancedOptions,
+        player.subtitlePreference, player.audioPreference,
         player.selected, video.state.stream, video.state.loaded,
         video.state.audioTracks, video.state.selectedAudioTrackId,
         video.state.subtitlesTracks, video.state.extraSubtitlesTracks, pictureChoice,

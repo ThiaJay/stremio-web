@@ -1,7 +1,8 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import enhancedSubtitlePolicy = require('./enhancedSubtitlePolicy');
+import { PLAYER_STORAGE_KEYS, readPlayerSubtitleAutomation } from './intelligentSubtitles/preference-player-gate.mjs';
 import { languages } from 'stremio/common';
 
 type Args = {
@@ -66,16 +67,22 @@ const useAudio = ({ player, video, settings, streamStateChanged, audioPreference
     const trackSelectionLocked = useRef(false);
     const [enhancedOptions, setEnhancedOptions] = useState(() =>
         enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+    const [enhancedStorageRevision, setEnhancedStorageRevision] = useState(0);
     useEffect(() => {
         if (typeof window === 'undefined') return undefined;
         const refresh = (event: StorageEvent) => {
-            if (event.key === null || event.key === enhancedSubtitlePolicy.STORAGE_KEY) {
+            if (event.key === null || PLAYER_STORAGE_KEYS.includes(event.key)) {
                 setEnhancedOptions(enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+                setEnhancedStorageRevision((revision) => revision + 1);
             }
         };
         window.addEventListener('storage', refresh);
         return () => window.removeEventListener('storage', refresh);
     }, []);
+    const enhancedAutomation = useMemo(() => readPlayerSubtitleAutomation({
+        storage: enhancedSubtitlePolicy.currentStorage(),
+        options: enhancedOptions,
+    }), [enhancedOptions, enhancedStorageRevision]);
     const appliedTrack = useRef<string | null>(null);
 
     videoRef.current = video;
@@ -107,7 +114,7 @@ const useAudio = ({ player, video, settings, streamStateChanged, audioPreference
 
         const nativePreference = player.audioPreference !== null && player.audioPreference !== undefined;
         const savedPreference = !!player.streamState?.audioTrack?.id;
-        const enhancedTrack = !nativePreference && !savedPreference ?
+        const enhancedTrack = enhancedAutomation.audio && !nativePreference && !savedPreference ?
             enhancedSubtitlePolicy.preferredAudioTrack(
                 video.state.audioTracks, video.state.selectedAudioTrackId, enhancedOptions, false,
             ) : null;
@@ -134,6 +141,7 @@ const useAudio = ({ player, video, settings, streamStateChanged, audioPreference
         player.streamState,
         settings.audioLanguage,
         enhancedOptions,
+        enhancedAutomation.audio,
         video.state.audioTracks,
         video.state.selectedAudioTrackId,
         video.state.stream,
