@@ -59,6 +59,10 @@ jobs:
           JS
       - name: Install dependencies without install-time scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Compile exact Foundation subtitle provenance contract
+        run: |
+          node --test tests/subtitleProvenanceTypes.node.mjs
+          pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --types node tests/subtitle-provenance-types/globals.d.mts tests/subtitle-provenance-types/preference-provenance.type-test.mts
       - name: Run Enhanced smart subtitle and skip policy regressions
         run: node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
       - name: Run existing Web regression suite
