@@ -2,12 +2,6 @@ name: Stremio Core API30 compatibility build
 # Source-bound draft validation only; Actions enabled after inherited-workflow audit; no release, signing, account or device action.
 
 on:
-  push:
-    branches:
-      - feature/enhanced-tv-wasm-capability-audit-20261013-v1
-    paths:
-      - '.github/workflows/enhanced-tv-core-compatibility-build.yml'
-      - 'android-tv-shell/tests/audit_core_compatibility_wasm.py'
   pull_request:
     paths:
       - '.github/workflows/enhanced-tv-core-compatibility-build.yml'
@@ -71,6 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           rustup toolchain install 1.95.0 --profile minimal --target wasm32-unknown-unknown
+          rustup component add rust-src --toolchain 1.95.0
           rustc +1.95.0 --version | grep -Eq '^rustc 1\.95\.0 '
           rustup target list --toolchain 1.95.0 --installed |
             grep -Fxq wasm32-unknown-unknown
@@ -80,12 +75,19 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: '1.95.0'
           RUSTFLAGS: '-C target-feature=-reference-types'
+          RUSTC_BOOTSTRAP: '1'
         run: |
           set -euo pipefail
+          mkdir -p .compat-core-source/.cargo
+          printf '%s\n' '[unstable]' 'build-std = ["std", "panic_abort"]' > .compat-core-source/.cargo/config.toml
+          test "$(wc -l < .compat-core-source/.cargo/config.toml)" -eq 2
+          grep -Fxq '[unstable]' .compat-core-source/.cargo/config.toml
+          grep -Fxq 'build-std = ["std", "panic_abort"]' .compat-core-source/.cargo/config.toml
           cd .compat-core-source/stremio-core-web
           npm ci --ignore-scripts
           ./scripts/build.sh --release
           test -s stremio_core_web_bg.wasm
+          echo CORE_COMPATIBILITY_EXACT_RUST_STDLIB_REBUILD_PASS
           test -s stremio_core_web.js
           test -s bridge.js
           test -s worker.js
