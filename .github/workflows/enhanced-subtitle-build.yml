@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/enhanced-subtitles-20261012-v6
+      - test/subtitle-provenance-types-20261027-v1
   pull_request:
     branches:
       - feature/night-audio-video-integration-20261012
