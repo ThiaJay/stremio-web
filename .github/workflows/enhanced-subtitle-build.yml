@@ -62,8 +62,8 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Compile exact Foundation subtitle provenance contract
         run: |
-          node --test tests/subtitleProvenanceTypes.node.mjs
-          pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --types node tests/subtitle-provenance-types/globals.d.mts tests/subtitle-provenance-types/preference-provenance.type-test.mts
+          node --test tests/subtitleProvenanceTypes.node.mjs tests/subtitlePreferenceStoreTypes.node.mjs
+          pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --types node tests/subtitle-provenance-types/globals.d.mts tests/subtitle-provenance-types/preference-provenance.type-test.mts tests/subtitle-provenance-types/preference-store.type-test.mts
       - name: Run installation-local subtitle preference storage regressions
         run: node --test tests/subtitlePreferenceStore.node.mjs
       - name: Run Enhanced smart subtitle and skip policy regressions
