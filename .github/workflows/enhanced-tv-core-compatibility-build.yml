@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           rustup toolchain install 1.95.0 --profile minimal --target wasm32-unknown-unknown
-          rustc +1.95.0 --version | grep -Eq '^rustc 1\\.95\\.0 '
+          rustc +1.95.0 --version | grep -Eq '^rustc 1\.95\.0 '
           rustup target list --toolchain 1.95.0 --installed |
             grep -Fxq wasm32-unknown-unknown
           wasm-pack --version | grep -Fxq 'wasm-pack 0.14.0'
