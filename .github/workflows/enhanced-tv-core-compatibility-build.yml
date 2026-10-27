@@ -157,6 +157,12 @@ jobs:
           test ! -e android-tv-shell/app/src/debug/assets/web/qa-core-route.js
           cp android-tv-shell/tests/real_core_route_qa.js             android-tv-shell/app/src/debug/assets/web/qa-core-route.js
           python3 android-tv-shell/tests/audit_core_route_qa.py
+      - name: Bundle exact pinned StremioVideo backend for test-only instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec webpack --config android-tv-shell/tests/video_qa.webpack.config.cjs --mode production --stats errors-only
+          python3 android-tv-shell/tests/audit_real_engine_qa.py
       - name: Set up pinned JDK
         uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
@@ -202,5 +208,7 @@ jobs:
           rm -rf .compat-core-source
           rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
           rm -f android-tv-shell/app/src/debug/assets/web/qa-core-route.js
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-video-engine.js
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-*.wasm
           echo CORE_COMPATIBILITY_SOURCE_ONLY_NO_ARTIFACT_NO_RELEASE
 # No upload, Pages, release, signing, account, provider or personal-device action.
