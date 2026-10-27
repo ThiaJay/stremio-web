@@ -102,7 +102,7 @@ export default [
         rules: {
             'react/display-name': 'off',
         }
-    }
+    },
     {
         // These two runtime modules are byte-for-byte Foundation sources.
         // Their reviewed Git identities are enforced by a mandatory Node test;
