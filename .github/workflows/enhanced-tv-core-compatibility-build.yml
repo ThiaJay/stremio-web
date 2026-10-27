@@ -1,4 +1,5 @@
 name: Stremio Core API30 compatibility build
+# Source-bound draft validation only; no release, signing, account or device action.
 
 on:
   push:
