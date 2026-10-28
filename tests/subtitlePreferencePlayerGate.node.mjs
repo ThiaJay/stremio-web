@@ -31,13 +31,16 @@ class MemoryStorage {
 
 const entropy = (length) => new Uint8Array(length).fill(0x2a);
 const smart = policy.normalise(null);
-const record = (storage, options = smart) => recordExplicitLocalChoice({
-    storage,
-    randomBytes: entropy,
-    sessionPreference: { enabled: true, language: options.subtitleLanguages[0] },
-    globalLanguage: null,
-    surface: 'subtitle-settings',
-});
+const record = (storage, options = smart) => {
+    storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
+    return recordExplicitLocalChoice({
+        storage,
+        randomBytes: entropy,
+        sessionPreference: { enabled: true, language: options.subtitleLanguages[0] },
+        globalLanguage: null,
+        surface: 'subtitle-settings',
+    });
+};
 
 test('default Smart policy cannot become player consent without a local receipt', () => {
     const gate = readPlayerSubtitleAutomation({ storage: new MemoryStorage(), options: smart });
@@ -80,6 +83,27 @@ test('changed language, corrupt receipt and cross-installation identity fail clo
 
     storage.setItem(PREFERENCE_RECEIPT_KEY, receipt);
     storage.setItem(INSTALLATION_DIGEST_KEY, 'b'.repeat(64));
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
+});
+
+test('malformed stored policy cannot reuse a valid local receipt', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+    storage.setItem(policy.STORAGE_KEY, '{');
+    const normalizedFallback = policy.read(storage);
+    assert.deepEqual(normalizedFallback, smart);
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: normalizedFallback,
+    }).subtitle, false);
+});
+
+test('stale or non-canonical policy cannot reuse a receipt with the same language', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+    const stale = { ...smart, preferUnderstoodAudio: false };
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: stale }).subtitle, false);
+    storage.setItem(policy.STORAGE_KEY, JSON.stringify({ ...smart, injected: true }));
     assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
 });
 
