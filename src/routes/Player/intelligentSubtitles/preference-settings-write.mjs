@@ -75,6 +75,16 @@ const onlyControlChanged = (before, after, control) => {
     if (!field) return false;
     return POLICY_KEYS.every((key) => key === field || same(before[key], after[key]));
 };
+const parseStoredOptions = (raw) => {
+    if (raw === null) return policy.normalise(null);
+    if (typeof raw !== 'string' || raw.length === 0 || raw.length > 4096) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        return validOptions(parsed) && same(policy.normalise(parsed), parsed) ? parsed : null;
+    } catch {
+        return null;
+    }
+};
 const restore = (storage, snapshots) => {
     try {
         for (const [key, raw] of snapshots) {
@@ -107,6 +117,9 @@ export function commitSubtitleSettingsChoice({
     const keys = [policy.STORAGE_KEY, INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY];
     const snapshots = keys.map((key) => [key, safeGet(storage, key)]);
     if (snapshots.some(([, raw]) => raw === undefined)) return rejected();
+    const storedOptions = parseStoredOptions(snapshots[0][1]);
+    if (!storedOptions || !same(storedOptions, currentOptions) ||
+            !snapshots.every(([key, raw]) => safeGet(storage, key) === raw)) return rejected();
     const fail = () => rejected(restore(storage, snapshots));
     const normalized = policy.normalise(nextOptions);
     if (!same(normalized, nextOptions)) return rejected();
@@ -140,4 +153,5 @@ export function commitSubtitleSettingsChoice({
     if (!provenance) return fail();
     return Object.freeze({ ok: true, provenance, rollbackVerified: true });
 }
+
 
