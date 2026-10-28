@@ -56,6 +56,38 @@ test('explicit first-run choice writes, reads back and promotes exact local evid
   assert.deepEqual(loadStoredPreference({ storage, sessionPreference: enabled, globalLanguage: 'eng' }), promoted);
 });
 
+test('load promotion requires stable exact digest and receipt readback', async () => {
+  const {
+    recordExplicitLocalChoice, loadStoredPreference,
+    INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY,
+  } = await fresh();
+  const accepted = memoryStorage();
+  recordExplicitLocalChoice({
+    storage: accepted, randomBytes: entropy(), sessionPreference: enabled,
+    globalLanguage: 'eng', surface: 'first-run',
+  });
+  const seed = accepted.snapshot();
+  const driftingStorage = (driftKey, replacement) => {
+    let driftReads = 0;
+    return {
+      getItem(key) {
+        if (key === driftKey && ++driftReads > 1) return replacement;
+        return Object.hasOwn(seed, key) ? seed[key] : null;
+      },
+      setItem() { throw new Error('read-only test storage'); },
+      removeItem() { throw new Error('read-only test storage'); },
+    };
+  };
+  assert.equal(loadStoredPreference({
+    storage: driftingStorage(INSTALLATION_DIGEST_KEY, 'cd'.repeat(32)),
+    sessionPreference: enabled, globalLanguage: 'eng',
+  }), null);
+  assert.equal(loadStoredPreference({
+    storage: driftingStorage(PREFERENCE_RECEIPT_KEY, `${seed[PREFERENCE_RECEIPT_KEY]} `),
+    sessionPreference: enabled, globalLanguage: 'eng',
+  }), null);
+});
+
 test('settings choice reuses identity and increments the bounded revision', async () => {
   const { recordExplicitLocalChoice } = await fresh();
   const storage = memoryStorage();
