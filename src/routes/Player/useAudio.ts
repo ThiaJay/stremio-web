@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import enhancedSubtitlePolicy = require('./enhancedSubtitlePolicy');
-import { PLAYER_STORAGE_KEYS, readPlayerSubtitleAutomation } from './intelligentSubtitles/preference-player-gate.mjs';
+import { PLAYER_PREFERENCE_EVENT, PLAYER_STORAGE_KEYS, readPlayerSubtitleAutomation } from './intelligentSubtitles/preference-player-gate.mjs';
 import { languages } from 'stremio/common';
 
 type Args = {
@@ -70,14 +70,19 @@ const useAudio = ({ player, video, settings, streamStateChanged, audioPreference
     const [enhancedStorageRevision, setEnhancedStorageRevision] = useState(0);
     useEffect(() => {
         if (typeof window === 'undefined') return undefined;
-        const refresh = (event: StorageEvent) => {
-            if (event.key === null || PLAYER_STORAGE_KEYS.includes(event.key)) {
-                setEnhancedOptions(enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
-                setEnhancedStorageRevision((revision) => revision + 1);
-            }
+        const refresh = () => {
+            setEnhancedOptions(enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+            setEnhancedStorageRevision((revision) => revision + 1);
         };
-        window.addEventListener('storage', refresh);
-        return () => window.removeEventListener('storage', refresh);
+        const refreshStorage = (event: StorageEvent) => {
+            if (event.key === null || PLAYER_STORAGE_KEYS.includes(event.key)) refresh();
+        };
+        window.addEventListener('storage', refreshStorage);
+        window.addEventListener(PLAYER_PREFERENCE_EVENT, refresh);
+        return () => {
+            window.removeEventListener('storage', refreshStorage);
+            window.removeEventListener(PLAYER_PREFERENCE_EVENT, refresh);
+        };
     }, []);
     const enhancedAutomation = useMemo(() => readPlayerSubtitleAutomation({
         storage: enhancedSubtitlePolicy.currentStorage(),
@@ -151,3 +156,4 @@ const useAudio = ({ player, video, settings, streamStateChanged, audioPreference
 };
 
 export default useAudio;
+

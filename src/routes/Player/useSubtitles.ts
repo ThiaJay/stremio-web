@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import enhancedSubtitlePolicy = require('./enhancedSubtitlePolicy');
-import { PLAYER_STORAGE_KEYS, readPlayerSubtitleAutomation } from './intelligentSubtitles/preference-player-gate.mjs';
+import { PLAYER_PREFERENCE_EVENT, PLAYER_STORAGE_KEYS, readPlayerSubtitleAutomation } from './intelligentSubtitles/preference-player-gate.mjs';
 import { useTranslation } from 'react-i18next';
 import { CONSTANTS, getKeyboardShortcutKeys, languages, useFileDropListener, useInterval, useShortcut, useTimeout, useToast } from 'stremio/common';
 import {
@@ -199,14 +199,19 @@ const useSubtitles = ({
     const [pictureChoice, setPictureChoice] = useState<'unknown' | 'confirmed' | 'notPresent'>('unknown');
     useEffect(() => {
         if (typeof window === 'undefined') return undefined;
-        const refresh = (event: StorageEvent) => {
-            if (event.key === null || PLAYER_STORAGE_KEYS.includes(event.key)) {
-                setEnhancedOptions(enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
-                setEnhancedStorageRevision((revision) => revision + 1);
-            }
+        const refresh = () => {
+            setEnhancedOptions(enhancedSubtitlePolicy.read(enhancedSubtitlePolicy.currentStorage()));
+            setEnhancedStorageRevision((revision) => revision + 1);
         };
-        window.addEventListener('storage', refresh);
-        return () => window.removeEventListener('storage', refresh);
+        const refreshStorage = (event: StorageEvent) => {
+            if (event.key === null || PLAYER_STORAGE_KEYS.includes(event.key)) refresh();
+        };
+        window.addEventListener('storage', refreshStorage);
+        window.addEventListener(PLAYER_PREFERENCE_EVENT, refresh);
+        return () => {
+            window.removeEventListener('storage', refreshStorage);
+            window.removeEventListener(PLAYER_PREFERENCE_EVENT, refresh);
+        };
     }, []);
     const appliedTrack = useRef<{ id: string, source: SubtitleSource } | null>(null);
     const lastSelectedTrack = useRef<SelectedSubtitleTrack | null>(null);
@@ -787,3 +792,4 @@ const useSubtitles = ({
 };
 
 export default useSubtitles;
+

@@ -11,6 +11,8 @@ export const PLAYER_STORAGE_KEYS = Object.freeze([
     PREFERENCE_RECEIPT_KEY,
 ]);
 
+export const PLAYER_PREFERENCE_EVENT = 'stremio-enhanced:subtitle-preference-stored-v1';
+
 const result = (subtitle, audio, reason, provenance = null) => Object.freeze({
     subtitle,
     audio,
@@ -40,3 +42,4 @@ export function readPlayerSubtitleAutomation({ storage, options } = {}) {
         :
         result(false, false, 'installation_preference_unverified');
 }
+

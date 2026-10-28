@@ -16,3 +16,5 @@ test('real settings component wires every allowlisted control and no hydration s
 
 test('session-only drift cannot be carried into a later persisted choice',()=>{const s=storage();const drifted={...base(),allowForcedOnly:true};const after={...drifted,mode:'on'};const r=commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:drifted,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'on'}});assert.equal(r.ok,false);assert.deepEqual(s.snapshot(),{});});
 
+test('accepted same-window settings notify mounted players without exposing preference payload',async()=>{const source=await readFile(new URL('../src/routes/Settings/Player/EnhancedSubtitlePreferences.tsx',import.meta.url),'utf8');assert.match(source,/result\?\.ok === true && typeof window !== 'undefined'/);assert.match(source,/window\.dispatchEvent\(new Event\(PLAYER_PREFERENCE_EVENT\)\)/);assert.doesNotMatch(source,/CustomEvent|detail\s*:/);assert.ok(source.indexOf("result?.ok === true")<source.indexOf('window.dispatchEvent(new Event(PLAYER_PREFERENCE_EVENT))'));});
+

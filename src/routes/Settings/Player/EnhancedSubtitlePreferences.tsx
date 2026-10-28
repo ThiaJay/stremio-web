@@ -4,6 +4,7 @@ import { MultiselectMenu, Toggle } from 'stremio/components';
 import { languageNames } from 'stremio/common';
 import { Option } from '../components';
 import policy = require('../../Player/enhancedSubtitlePolicy');
+import { PLAYER_PREFERENCE_EVENT } from '../../Player/intelligentSubtitles/preference-player-gate.mjs';
 import { commitSubtitleSettingsChoice } from '../../Player/intelligentSubtitles/preference-settings-write.mjs';
 import type { SubtitleSettingsControl } from '../../Player/intelligentSubtitles/preference-settings-write.mjs';
 
@@ -51,6 +52,13 @@ const EnhancedSubtitlePreferences = () => {
                 value,
             },
         });
+        if (result?.ok === true && typeof window !== 'undefined') {
+            try {
+                window.dispatchEvent(new Event(PLAYER_PREFERENCE_EVENT));
+            } catch {
+                // Persistence already succeeded; a remount will re-read the exact stored value.
+            }
+        }
         setValues(next);
         setSaved(result?.ok === true);
     };
@@ -147,4 +155,5 @@ const EnhancedSubtitlePreferences = () => {
 };
 
 export default EnhancedSubtitlePreferences;
+
 

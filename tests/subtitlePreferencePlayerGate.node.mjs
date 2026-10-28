@@ -9,6 +9,7 @@ import {
     recordExplicitLocalChoice,
 } from '../src/routes/Player/intelligentSubtitles/preference-store.mjs';
 import {
+    PLAYER_PREFERENCE_EVENT,
     PLAYER_STORAGE_KEYS,
     readPlayerSubtitleAutomation,
 } from '../src/routes/Player/intelligentSubtitles/preference-player-gate.mjs';
@@ -117,6 +118,8 @@ test('both production player hooks consume the same gate and storage-key set', a
     for (const source of [subtitles, audio]) {
         assert.match(source, /readPlayerSubtitleAutomation/);
         assert.match(source, /PLAYER_STORAGE_KEYS/);
+        assert.match(source, /addEventListener\(PLAYER_PREFERENCE_EVENT, refresh\)/);
+        assert.match(source, /removeEventListener\(PLAYER_PREFERENCE_EVENT, refresh\)/);
     }
     assert.match(subtitles, /enhancedAutomation\.subtitle/);
     assert.match(audio, /enhancedAutomation\.audio/);
@@ -125,5 +128,7 @@ test('both production player hooks consume the same gate and storage-key set', a
         INSTALLATION_DIGEST_KEY,
         PREFERENCE_RECEIPT_KEY,
     ]);
+    assert.equal(PLAYER_PREFERENCE_EVENT, 'stremio-enhanced:subtitle-preference-stored-v1');
     assert.doesNotMatch(gateSource, /accountHydrat|fetch\(|XMLHttpRequest|WebSocket|device|package/i);
 });
+
