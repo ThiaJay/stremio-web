@@ -52,15 +52,16 @@ const EnhancedSubtitlePreferences = () => {
                 value,
             },
         });
-        if (result?.ok === true && typeof window !== 'undefined') {
+        const accepted = result?.ok === true;
+        if (accepted && typeof window !== 'undefined') {
             try {
                 window.dispatchEvent(new Event(PLAYER_PREFERENCE_EVENT));
             } catch {
                 // Persistence already succeeded; a remount will re-read the exact stored value.
             }
         }
-        setValues(next);
-        setSaved(result?.ok === true);
+        setValues(accepted ? next : policy.read(storage));
+        setSaved(accepted);
     };
     const audio = values.understoodLanguages;
     const subtitles = values.subtitleLanguages;
@@ -148,7 +149,7 @@ const EnhancedSubtitlePreferences = () => {
             <Option label={'Show forced translations in understood audio'} labelDefault={'Show forced translations in understood audio'}>
                 <Toggle checked={values.forcedTranslationsForUnderstoodAudio} onClick={() => apply('forced-translations', !values.forcedTranslationsForUnderstoodAudio, { forcedTranslationsForUnderstoodAudio: !values.forcedTranslationsForUnderstoodAudio })} />
             </Option>
-            {!saved && <p role="alert">{t('ENHANCED_SUBTITLE_SETTINGS_SAVE_FAILED', { defaultValue: 'These preferences could not be saved on this device. The current session will keep them.' })}</p>}
+            {!saved && <p role="alert">{t('ENHANCED_SUBTITLE_SETTINGS_SAVE_FAILED', { defaultValue: 'These preferences could not be saved on this device. The unaccepted choice was discarded and the displayed settings were re-read from local storage.' })}</p>}
             <p>{t('ENHANCED_SUBTITLE_PICTURE_ADVISORY', { defaultValue: 'Picture subtitle detection is advisory unless you confirm the text is visible. Automatic selection does not change watched history.' })}</p>
         </>
     );
