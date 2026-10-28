@@ -2,6 +2,7 @@ import policy from '../enhancedSubtitlePolicy.js';
 import {
     INSTALLATION_DIGEST_KEY,
     PREFERENCE_RECEIPT_KEY,
+    loadStoredPreference,
     recordExplicitLocalChoice,
 } from './preference-store.mjs';
 
@@ -85,8 +86,16 @@ const parseStoredOptions = (raw) => {
         return null;
     }
 };
-const restore = (storage, snapshots) => {
+// Rollback owns only exact values written by this transaction. Any unknown
+// policy, identity or receipt drift belongs to another browser context and
+// must be preserved rather than replaced with a stale snapshot.
+const restore = (storage, snapshots, transactionWrites = []) => {
     try {
+        const originals = new Map(snapshots);
+        const written = new Map(transactionWrites);
+        const current = snapshots.map(([key]) => [key, safeGet(storage, key)]);
+        if (current.some(([, raw]) => raw === undefined) || current.some(([key, raw]) =>
+            raw !== originals.get(key) && (!written.has(key) || raw !== written.get(key)))) return false;
         for (const [key, raw] of snapshots) {
             if (raw === null) storage.removeItem(key);
             else storage.setItem(key, raw);
@@ -120,25 +129,43 @@ export function commitSubtitleSettingsChoice({
     const storedOptions = parseStoredOptions(snapshots[0][1]);
     if (!storedOptions || !same(storedOptions, currentOptions) ||
             !snapshots.every(([key, raw]) => safeGet(storage, key) === raw)) return rejected();
-    const fail = () => rejected(restore(storage, snapshots));
     const normalized = policy.normalise(nextOptions);
     if (!same(normalized, nextOptions)) return rejected();
     const policyRaw = JSON.stringify(normalized);
+    const policyWrite = [[policy.STORAGE_KEY, policyRaw]];
+    const fail = (writes = policyWrite) => rejected(restore(storage, snapshots, writes));
+    const readTuple = () => keys.map((key) => [key, safeGet(storage, key)]);
+    const tupleMatches = (tuple, expected) => tuple.every(([key, raw]) =>
+        raw !== undefined && expected.has(key) && raw === expected.get(key));
 
     try {
         storage.setItem(policy.STORAGE_KEY, policyRaw);
     } catch {
         return fail();
     }
-    if (safeGet(storage, policy.STORAGE_KEY) !== policyRaw) return fail();
+    const policyReadback = safeGet(storage, policy.STORAGE_KEY);
+    if (policyReadback !== policyRaw) {
+        return fail(policyReadback === undefined ? policyWrite : [[policy.STORAGE_KEY, policyReadback]]);
+    }
 
     if (nextOptions.mode === 'off' || nextOptions.mode === 'stremio') {
+        const transactionWrites = [
+            [policy.STORAGE_KEY, policyRaw],
+            [PREFERENCE_RECEIPT_KEY, null],
+        ];
         try {
             storage.removeItem(PREFERENCE_RECEIPT_KEY);
         } catch {
-            return fail();
+            return fail(transactionWrites);
         }
-        if (safeGet(storage, PREFERENCE_RECEIPT_KEY) !== null) return fail();
+        const expected = new Map([
+            [policy.STORAGE_KEY, policyRaw],
+            [INSTALLATION_DIGEST_KEY, snapshots[1][1]],
+            [PREFERENCE_RECEIPT_KEY, null],
+        ]);
+        if (!tupleMatches(readTuple(), expected) || !tupleMatches(readTuple(), expected)) {
+            return fail(transactionWrites);
+        }
         return Object.freeze({ ok: true, provenance: null, rollbackVerified: true });
     }
 
@@ -151,7 +178,34 @@ export function commitSubtitleSettingsChoice({
         surface: 'subtitle-settings',
     });
     if (!provenance) return fail();
+
+    const receiptRaw = JSON.stringify({
+        schemaVersion: 1,
+        scope: 'installation-local',
+        receipt: {
+            schemaVersion: 1,
+            kind: 'explicit-local-choice',
+            installationDigest: provenance.installationDigest,
+            preferenceRevision: provenance.preferenceRevision,
+            surface: 'subtitle-settings',
+            choice: 'enabled',
+            binding: provenance.binding,
+        },
+    });
+    const transactionWrites = [
+        [policy.STORAGE_KEY, policyRaw],
+        [INSTALLATION_DIGEST_KEY, provenance.installationDigest],
+        [PREFERENCE_RECEIPT_KEY, receiptRaw],
+    ];
+    const expected = new Map(transactionWrites);
+    if (!tupleMatches(readTuple(), expected)) return fail(transactionWrites);
+    const reloaded = loadStoredPreference({
+        storage,
+        sessionPreference: { enabled: true, language },
+        globalLanguage: null,
+    });
+    if (!same(reloaded, provenance) || !tupleMatches(readTuple(), expected)) {
+        return fail(transactionWrites);
+    }
     return Object.freeze({ ok: true, provenance, rollbackVerified: true });
 }
-
-
