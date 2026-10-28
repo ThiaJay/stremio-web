@@ -14,24 +14,48 @@ export const PLAYER_STORAGE_KEYS = Object.freeze([
 export const PLAYER_PREFERENCE_EVENT = 'stremio-enhanced:subtitle-preference-stored-v1';
 
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-const readCanonicalStoredPolicy = (storage) => {
+const readPlayerStoredTuple = (storage) => {
     if (!storage || typeof storage.getItem !== 'function') return null;
-    let raw;
+    let policyRaw;
+    let installationDigestRaw;
+    let receiptRaw;
     try {
-        raw = storage.getItem(policy.STORAGE_KEY);
+        policyRaw = storage.getItem(policy.STORAGE_KEY);
+        installationDigestRaw = storage.getItem(INSTALLATION_DIGEST_KEY);
+        receiptRaw = storage.getItem(PREFERENCE_RECEIPT_KEY);
     } catch {
         return null;
     }
-    if (raw === null) return policy.normalise(null);
-    if (typeof raw !== 'string' || raw.length === 0 || raw.length > 4096) return null;
+    if ((installationDigestRaw !== null && typeof installationDigestRaw !== 'string') ||
+            (receiptRaw !== null && typeof receiptRaw !== 'string')) return null;
+    let storedPolicy;
+    if (policyRaw === null) {
+        storedPolicy = policy.normalise(null);
+    } else if (typeof policyRaw !== 'string' || policyRaw.length === 0 || policyRaw.length > 4096) {
+        return null;
+    }
     try {
-        const parsed = JSON.parse(raw);
-        const normalized = policy.normalise(parsed);
-        return same(normalized, parsed) ? normalized : null;
+        if (policyRaw !== null) {
+            const parsed = JSON.parse(policyRaw);
+            const normalized = policy.normalise(parsed);
+            if (!same(normalized, parsed)) return null;
+            storedPolicy = normalized;
+        }
     } catch {
         return null;
     }
+    return Object.freeze({
+        policyRaw,
+        installationDigestRaw,
+        receiptRaw,
+        storedPolicy,
+    });
 };
+
+const sameTuple = (left, right) => left && right &&
+    left.policyRaw === right.policyRaw &&
+    left.installationDigestRaw === right.installationDigestRaw &&
+    left.receiptRaw === right.receiptRaw;
 
 const result = (subtitle, audio, reason, provenance = null) => Object.freeze({
     subtitle,
@@ -49,8 +73,8 @@ export function readPlayerSubtitleAutomation({ storage, options } = {}) {
         return result(true, false, 'subtitles_disabled');
     }
 
-    const storedPolicy = readCanonicalStoredPolicy(storage);
-    if (!storedPolicy || !same(storedPolicy, normalized)) {
+    const before = readPlayerStoredTuple(storage);
+    if (!before || !same(before.storedPolicy, normalized)) {
         return result(false, false, 'installation_preference_unverified');
     }
 
@@ -62,7 +86,8 @@ export function readPlayerSubtitleAutomation({ storage, options } = {}) {
         },
         globalLanguage: null,
     });
-    return provenance ?
+    const after = readPlayerStoredTuple(storage);
+    return provenance && sameTuple(before, after) && same(after.storedPolicy, normalized) ?
         result(true, true, 'installation_preference_verified', provenance)
         :
         result(false, false, 'installation_preference_unverified');

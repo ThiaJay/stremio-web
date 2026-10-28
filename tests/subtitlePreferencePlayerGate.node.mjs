@@ -29,6 +29,19 @@ class MemoryStorage {
     }
 }
 
+class DriftAfterPromotionStorage extends MemoryStorage {
+    constructor(entries, mutate) {
+        super(entries);
+        this.reads = 0;
+        this.mutate = mutate;
+    }
+    getItem(key) {
+        this.reads += 1;
+        if (this.reads === 8) this.mutate(this);
+        return super.getItem(key);
+    }
+}
+
 const entropy = (length) => new Uint8Array(length).fill(0x2a);
 const smart = policy.normalise(null);
 const record = (storage, options = smart) => {
@@ -105,6 +118,32 @@ test('stale or non-canonical policy cannot reuse a receipt with the same languag
     assert.equal(readPlayerSubtitleAutomation({ storage, options: stale }).subtitle, false);
     storage.setItem(policy.STORAGE_KEY, JSON.stringify({ ...smart, injected: true }));
     assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
+});
+
+test('player promotion requires a stable policy, installation and receipt tuple', () => {
+    const source = new MemoryStorage();
+    assert.ok(record(source));
+    const entries = [...source.values.entries()];
+    const mutations = [
+        (storage) => storage.values.set(
+            policy.STORAGE_KEY,
+            JSON.stringify({ ...smart, preferUnderstoodAudio: false }),
+        ),
+        (storage) => storage.values.set(INSTALLATION_DIGEST_KEY, 'b'.repeat(64)),
+        (storage) => storage.values.set(
+            PREFERENCE_RECEIPT_KEY,
+            `${storage.values.get(PREFERENCE_RECEIPT_KEY)}x`,
+        ),
+    ];
+
+    for (const mutate of mutations) {
+        const storage = new DriftAfterPromotionStorage(entries, mutate);
+        const gate = readPlayerSubtitleAutomation({ storage, options: smart });
+        assert.equal(gate.subtitle, false);
+        assert.equal(gate.audio, false);
+        assert.equal(gate.reason, 'installation_preference_unverified');
+        assert.equal(gate.provenance, null);
+    }
 });
 
 test('explicit Off may disable subtitles but cannot drive audio automation', () => {
