@@ -13,6 +13,26 @@ export const PLAYER_STORAGE_KEYS = Object.freeze([
 
 export const PLAYER_PREFERENCE_EVENT = 'stremio-enhanced:subtitle-preference-stored-v1';
 
+const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const readCanonicalStoredPolicy = (storage) => {
+    if (!storage || typeof storage.getItem !== 'function') return null;
+    let raw;
+    try {
+        raw = storage.getItem(policy.STORAGE_KEY);
+    } catch {
+        return null;
+    }
+    if (raw === null) return policy.normalise(null);
+    if (typeof raw !== 'string' || raw.length === 0 || raw.length > 4096) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        const normalized = policy.normalise(parsed);
+        return same(normalized, parsed) ? normalized : null;
+    } catch {
+        return null;
+    }
+};
+
 const result = (subtitle, audio, reason, provenance = null) => Object.freeze({
     subtitle,
     audio,
@@ -27,6 +47,11 @@ export function readPlayerSubtitleAutomation({ storage, options } = {}) {
     }
     if (normalized.mode === 'off') {
         return result(true, false, 'subtitles_disabled');
+    }
+
+    const storedPolicy = readCanonicalStoredPolicy(storage);
+    if (!storedPolicy || !same(storedPolicy, normalized)) {
+        return result(false, false, 'installation_preference_unverified');
     }
 
     const provenance = loadStoredPreference({
