@@ -74,11 +74,6 @@ const parseEnvelope = (raw, installationDigest) => {
     return Object.freeze({ envelope, receipt });
 };
 
-const readInstallationDigest = (storage) => {
-    const raw = safeGet(storage, INSTALLATION_DIGEST_KEY);
-    return DIGEST.test(raw || '') ? raw : null;
-};
-
 export function ensureInstallationDigest({ storage, randomBytes } = {}) {
     if (!hasStorage(storage)) return null;
     const before = safeGet(storage, INSTALLATION_DIGEST_KEY);
@@ -107,10 +102,13 @@ export function ensureInstallationDigest({ storage, randomBytes } = {}) {
 
 export function loadStoredPreference({ storage, sessionPreference, globalLanguage } = {}) {
     if (!hasStorage(storage)) return null;
-    const installationDigest = readInstallationDigest(storage);
-    if (!installationDigest) return null;
-    const parsed = parseEnvelope(safeGet(storage, PREFERENCE_RECEIPT_KEY), installationDigest);
+    const installationDigest = safeGet(storage, INSTALLATION_DIGEST_KEY);
+    if (!DIGEST.test(installationDigest || '')) return null;
+    const receiptRaw = safeGet(storage, PREFERENCE_RECEIPT_KEY);
+    const parsed = parseEnvelope(receiptRaw, installationDigest);
     if (!parsed) return null;
+    if (safeGet(storage, INSTALLATION_DIGEST_KEY) !== installationDigest ||
+            safeGet(storage, PREFERENCE_RECEIPT_KEY) !== receiptRaw) return null;
     return promoteStoredPreferenceReceipt({
         activeInstallationDigest: installationDigest,
         sessionPreference,
