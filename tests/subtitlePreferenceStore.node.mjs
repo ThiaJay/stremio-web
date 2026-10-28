@@ -206,3 +206,45 @@ test('inputs are not mutated and storage source names no accounts or network API
   const source = await readFile(new URL('../src/routes/Player/intelligentSubtitles/preference-store.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|account|deviceId|packageName/i);
 });
+
+
+test('late concurrent digest drift rejects promotion without overwriting the other writer', async () => {
+  const { recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY } = await fresh();
+  const storage = memoryStorage();
+  const originalGet = storage.getItem.bind(storage);
+  const originalSet = storage.setItem.bind(storage);
+  let digestReads = 0;
+  const concurrentDigest = 'cd'.repeat(32);
+  storage.getItem = (key) => {
+    if (key === INSTALLATION_DIGEST_KEY && ++digestReads === 5) {
+      originalSet(key, concurrentDigest);
+    }
+    return originalGet(key);
+  };
+  assert.equal(recordExplicitLocalChoice({
+    storage, randomBytes: entropy(), sessionPreference: enabled,
+    globalLanguage: 'eng', surface: 'subtitle-settings',
+  }), null);
+  assert.equal(storage.snapshot()[INSTALLATION_DIGEST_KEY], concurrentDigest);
+  assert.ok(storage.snapshot()[PREFERENCE_RECEIPT_KEY]);
+});
+
+test('late concurrent receipt drift rejects promotion without restoring stale evidence', async () => {
+  const { recordExplicitLocalChoice, PREFERENCE_RECEIPT_KEY } = await fresh();
+  const storage = memoryStorage();
+  const originalGet = storage.getItem.bind(storage);
+  const originalSet = storage.setItem.bind(storage);
+  let receiptReads = 0;
+  const concurrentReceipt = '{"concurrent":true}';
+  storage.getItem = (key) => {
+    if (key === PREFERENCE_RECEIPT_KEY && ++receiptReads === 3) {
+      originalSet(key, concurrentReceipt);
+    }
+    return originalGet(key);
+  };
+  assert.equal(recordExplicitLocalChoice({
+    storage, randomBytes: entropy(), sessionPreference: enabled,
+    globalLanguage: 'eng', surface: 'subtitle-settings',
+  }), null);
+  assert.equal(storage.snapshot()[PREFERENCE_RECEIPT_KEY], concurrentReceipt);
+});

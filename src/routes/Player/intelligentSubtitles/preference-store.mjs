@@ -35,8 +35,16 @@ const bytesToDigest = (bytes) => {
     return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
 };
 
-const restore = (storage, snapshots) => {
+// Restore only when every key still contains either its original value or a
+// value written by this transaction. Unknown drift belongs to another writer
+// and must never be overwritten by rollback.
+const restore = (storage, snapshots, transactionWrites = []) => {
     try {
+        const originals = new Map(snapshots);
+        const written = new Map(transactionWrites);
+        const current = snapshots.map(([key]) => [key, safeGet(storage, key)]);
+        if (current.some(([, raw]) => raw === undefined) || current.some(([key, raw]) =>
+            raw !== originals.get(key) && (!written.has(key) || raw !== written.get(key)))) return false;
         for (const [key, raw] of snapshots) {
             if (raw === null) storage.removeItem(key);
             else storage.setItem(key, raw);
@@ -90,11 +98,11 @@ export function ensureInstallationDigest({ storage, randomBytes } = {}) {
     try {
         storage.setItem(INSTALLATION_DIGEST_KEY, generated);
     } catch {
-        restore(storage, [[INSTALLATION_DIGEST_KEY, before]]);
+        restore(storage, [[INSTALLATION_DIGEST_KEY, before]], [[INSTALLATION_DIGEST_KEY, generated]]);
         return null;
     }
     if (safeGet(storage, INSTALLATION_DIGEST_KEY) !== generated) {
-        restore(storage, [[INSTALLATION_DIGEST_KEY, before]]);
+        restore(storage, [[INSTALLATION_DIGEST_KEY, before]], [[INSTALLATION_DIGEST_KEY, generated]]);
         return null;
     }
     return generated;
@@ -137,14 +145,16 @@ export function recordExplicitLocalChoice({
     if (digestBefore === null && receiptBefore !== null) return null;
     const installationDigest = ensureInstallationDigest({ storage, randomBytes });
     if (!installationDigest) return null;
+    const digestWrite = [[INSTALLATION_DIGEST_KEY, installationDigest]];
+    const rollbackDigest = () => restore(storage, snapshots, digestWrite);
     const previous = receiptBefore === null ? null : parseEnvelope(receiptBefore, installationDigest);
     if (receiptBefore !== null && !previous) {
-        restore(storage, snapshots);
+        rollbackDigest();
         return null;
     }
     const previousRevision = previous?.receipt.preferenceRevision || 0;
     if (previousRevision >= Number.MAX_SAFE_INTEGER) {
-        restore(storage, snapshots);
+        rollbackDigest();
         return null;
     }
     const preferenceRevision = previousRevision + 1;
@@ -161,7 +171,7 @@ export function recordExplicitLocalChoice({
         },
     });
     if (!receipt) {
-        restore(storage, snapshots);
+        rollbackDigest();
         return null;
     }
     const raw = JSON.stringify({
@@ -170,17 +180,30 @@ export function recordExplicitLocalChoice({
         receipt,
     });
     if (raw.length > MAX_RECEIPT_BYTES) {
-        restore(storage, snapshots);
+        rollbackDigest();
         return null;
     }
+    const transactionWrites = [
+        [INSTALLATION_DIGEST_KEY, installationDigest],
+        [PREFERENCE_RECEIPT_KEY, raw],
+    ];
+    const rollbackTransaction = (written = transactionWrites) => restore(storage, snapshots, written);
     try {
         storage.setItem(PREFERENCE_RECEIPT_KEY, raw);
     } catch {
-        restore(storage, snapshots);
+        rollbackTransaction();
         return null;
     }
-    const readback = safeGet(storage, PREFERENCE_RECEIPT_KEY);
-    const parsed = readback === raw ? parseEnvelope(readback, installationDigest) : null;
+    const digestReadback = safeGet(storage, INSTALLATION_DIGEST_KEY);
+    const receiptReadback = safeGet(storage, PREFERENCE_RECEIPT_KEY);
+    if (digestReadback !== installationDigest || receiptReadback !== raw) {
+        rollbackTransaction([
+            [INSTALLATION_DIGEST_KEY, digestReadback],
+            [PREFERENCE_RECEIPT_KEY, receiptReadback],
+        ].filter(([, value]) => value !== undefined));
+        return null;
+    }
+    const parsed = parseEnvelope(receiptReadback, installationDigest);
     const promoted = parsed && promoteStoredPreferenceReceipt({
         activeInstallationDigest: installationDigest,
         sessionPreference,
@@ -193,8 +216,9 @@ export function recordExplicitLocalChoice({
             binding: parsed.receipt.binding,
         },
     });
-    if (!promoted) {
-        restore(storage, snapshots);
+    if (!promoted || safeGet(storage, INSTALLATION_DIGEST_KEY) !== installationDigest ||
+            safeGet(storage, PREFERENCE_RECEIPT_KEY) !== raw) {
+        rollbackTransaction();
         return null;
     }
     return promoted;
