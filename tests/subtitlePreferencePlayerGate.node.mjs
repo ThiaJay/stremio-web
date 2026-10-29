@@ -116,6 +116,10 @@ test('stale or non-canonical policy cannot reuse a receipt with the same languag
     assert.ok(record(storage));
     const stale = { ...smart, preferUnderstoodAudio: false };
     assert.equal(readPlayerSubtitleAutomation({ storage, options: stale }).subtitle, false);
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: { ...smart, accountHydration: true },
+    }).subtitle, false);
     storage.setItem(policy.STORAGE_KEY, JSON.stringify({ ...smart, injected: true }));
     assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
 });
