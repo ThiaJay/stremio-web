@@ -69,16 +69,23 @@ export function readPlayerSubtitleAutomation({ storage, options } = {}) {
     if (!same(normalized, options)) {
         return result(false, false, 'installation_preference_unverified');
     }
-    if (normalized.mode === 'stremio') {
-        return result(true, false, 'stremio_selected');
-    }
-    if (normalized.mode === 'off') {
-        return result(true, false, 'subtitles_disabled');
-    }
-
     const before = readPlayerStoredTuple(storage);
     if (!before || !same(before.storedPolicy, normalized)) {
         return result(false, false, 'installation_preference_unverified');
+    }
+    if (normalized.mode === 'stremio') {
+        const after = readPlayerStoredTuple(storage);
+        return sameTuple(before, after) && same(after.storedPolicy, normalized) ?
+            result(true, false, 'stremio_selected')
+            :
+            result(false, false, 'installation_preference_unverified');
+    }
+    if (normalized.mode === 'off') {
+        const after = readPlayerStoredTuple(storage);
+        return sameTuple(before, after) && same(after.storedPolicy, normalized) ?
+            result(true, false, 'subtitles_disabled')
+            :
+            result(false, false, 'installation_preference_unverified');
     }
 
     const provenance = loadStoredPreference({
