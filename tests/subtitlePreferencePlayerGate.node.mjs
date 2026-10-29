@@ -30,14 +30,15 @@ class MemoryStorage {
 }
 
 class DriftAfterPromotionStorage extends MemoryStorage {
-    constructor(entries, mutate) {
+    constructor(entries, mutate, mutateAt = 8) {
         super(entries);
         this.reads = 0;
         this.mutate = mutate;
+        this.mutateAt = mutateAt;
     }
     getItem(key) {
         this.reads += 1;
-        if (this.reads === 8) this.mutate(this);
+        if (this.reads === this.mutateAt) this.mutate(this);
         return super.getItem(key);
     }
 }
@@ -151,9 +152,12 @@ test('player promotion requires a stable policy, installation and receipt tuple'
 });
 
 test('explicit Off may disable subtitles but cannot drive audio automation', () => {
+    const storage = new MemoryStorage();
+    const options = { ...smart, mode: 'off' };
+    storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
     const gate = readPlayerSubtitleAutomation({
-        storage: new MemoryStorage(),
-        options: { ...smart, mode: 'off' },
+        storage,
+        options,
     });
     assert.deepEqual(gate, {
         subtitle: true,
@@ -164,9 +168,12 @@ test('explicit Off may disable subtitles but cannot drive audio automation', () 
 });
 
 test('original Stremio mode inherits subtitle handling and blocks enhanced audio', () => {
+    const storage = new MemoryStorage();
+    const options = { ...smart, mode: 'stremio' };
+    storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
     const gate = readPlayerSubtitleAutomation({
-        storage: null,
-        options: { ...smart, mode: 'stremio' },
+        storage,
+        options,
     });
     assert.deepEqual(gate, {
         subtitle: true,
@@ -174,6 +181,29 @@ test('original Stremio mode inherits subtitle handling and blocks enhanced audio
         reason: 'stremio_selected',
         provenance: null,
     });
+});
+
+test('Off and original Stremio require the same stable stored policy tuple', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+    for (const mode of ['off', 'stremio']) {
+        const gate = readPlayerSubtitleAutomation({
+            storage,
+            options: { ...smart, mode },
+        });
+        assert.equal(gate.subtitle, false);
+        assert.equal(gate.audio, false);
+        assert.equal(gate.reason, 'installation_preference_unverified');
+    }
+
+    const off = { ...smart, mode: 'off' };
+    const source = new MemoryStorage([[policy.STORAGE_KEY, JSON.stringify(off)]]);
+    const drift = new DriftAfterPromotionStorage(
+        [...source.values.entries()],
+        (target) => target.values.set(policy.STORAGE_KEY, JSON.stringify(smart)),
+        4,
+    );
+    assert.equal(readPlayerSubtitleAutomation({ storage: drift, options: off }).subtitle, false);
 });
 
 test('both production player hooks consume the same gate and storage-key set', async () => {
