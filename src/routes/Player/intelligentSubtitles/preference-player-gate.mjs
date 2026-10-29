@@ -66,6 +66,9 @@ const result = (subtitle, audio, reason, provenance = null) => Object.freeze({
 
 export function readPlayerSubtitleAutomation({ storage, options } = {}) {
     const normalized = policy.normalise(options);
+    if (!same(normalized, options)) {
+        return result(false, false, 'installation_preference_unverified');
+    }
     if (normalized.mode === 'stremio') {
         return result(true, false, 'stremio_selected');
     }
