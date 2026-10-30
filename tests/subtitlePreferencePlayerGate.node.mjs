@@ -147,6 +147,59 @@ test('caller serialization hooks and hidden authority fields fail closed', () =>
     assert.equal(readPlayerSubtitleAutomation({ storage, options: inherited }).subtitle, false);
 });
 
+test('nested policy arrays are snapshotted once and hostile access cannot escape', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+
+    const hostile = new Proxy(['en'], {
+        get(target, key, receiver) {
+            if (key === 'slice' || key === 'every') throw new Error('hostile nested array');
+            return Reflect.get(target, key, receiver);
+        },
+    });
+    assert.doesNotThrow(() => {
+        const gate = readPlayerSubtitleAutomation({
+            storage,
+            options: { ...smart, understoodLanguages: hostile },
+        });
+        assert.equal(gate.subtitle, true);
+        assert.equal(gate.audio, true);
+        assert.equal(gate.reason, 'installation_preference_verified');
+    });
+
+    const accessor = ['en'];
+    Object.defineProperty(accessor, '0', {
+        get() { throw new Error('nested accessor'); },
+        enumerable: true,
+    });
+    assert.doesNotThrow(() => {
+        assert.equal(readPlayerSubtitleAutomation({
+            storage,
+            options: { ...smart, subtitleLanguages: accessor },
+        }).subtitle, false);
+    });
+
+    const hidden = ['en'];
+    Object.defineProperty(hidden, 'accountHydration', { value: true });
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: { ...smart, understoodLanguages: hidden },
+    }).subtitle, false);
+
+    const symbol = ['en'];
+    symbol[Symbol('authority')] = true;
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: { ...smart, subtitleLanguages: symbol },
+    }).subtitle, false);
+
+    const inherited = Object.setPrototypeOf(['en'], { accountHydration: true });
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: { ...smart, subtitleLanguages: inherited },
+    }).subtitle, false);
+});
+
 test('player promotion requires a stable policy, installation and receipt tuple', () => {
     const source = new MemoryStorage();
     assert.ok(record(source));
@@ -250,4 +303,5 @@ test('both production player hooks consume the same gate and storage-key set', a
     assert.equal(PLAYER_PREFERENCE_EVENT, 'stremio-enhanced:subtitle-preference-stored-v1');
     assert.doesNotMatch(gateSource, /accountHydrat|fetch\(|XMLHttpRequest|WebSocket|device|package/i);
 });
+
 
