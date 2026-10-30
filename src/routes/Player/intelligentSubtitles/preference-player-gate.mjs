@@ -39,24 +39,58 @@ const samePolicy = (left, right) => left && right &&
     left.allowForcedOnly === right.allowForcedOnly &&
     left.forcedTranslationsForUnderstoodAudio === right.forcedTranslationsForUnderstoodAudio;
 
-const isExactPolicyObject = (candidate) => {
+const snapshotExactList = (candidate) => {
     try {
-        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) ||
-                Object.getPrototypeOf(candidate) !== Object.prototype ||
+        if (!Array.isArray(candidate) || Object.getPrototypeOf(candidate) !== Array.prototype ||
                 Object.getOwnPropertySymbols(candidate).length !== 0) return false;
-        const names = Object.getOwnPropertyNames(candidate);
-        if (names.length !== POLICY_FIELDS.length ||
-                !POLICY_FIELDS.every((field) => names.includes(field))) return false;
         const descriptors = Object.getOwnPropertyDescriptors(candidate);
-        return POLICY_FIELDS.every((field) => descriptors[field]?.enumerable === true &&
-            Object.prototype.hasOwnProperty.call(descriptors[field], 'value'));
+        const length = descriptors.length;
+        if (!length || !Object.prototype.hasOwnProperty.call(length, 'value') ||
+                !Number.isSafeInteger(length.value) || length.value < 1 || length.value > 8) return null;
+        const names = Object.getOwnPropertyNames(candidate);
+        const expectedNames = ['length', ...Array.from({ length: length.value }, (_, index) => String(index))];
+        if (names.length !== expectedNames.length ||
+                !expectedNames.every((name) => names.includes(name))) return null;
+        const values = [];
+        for (let index = 0; index < length.value; index += 1) {
+            const descriptor = descriptors[String(index)];
+            if (!descriptor || descriptor.enumerable !== true ||
+                    !Object.prototype.hasOwnProperty.call(descriptor, 'value') ||
+                    typeof descriptor.value !== 'string') return null;
+            values.push(descriptor.value);
+        }
+        return Object.freeze(values);
     } catch {
-        return false;
+        return null;
     }
 };
 
-const isCanonicalPolicy = (candidate, normalized) =>
-    isExactPolicyObject(candidate) && samePolicy(candidate, normalized);
+const snapshotExactPolicy = (candidate) => {
+    try {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) ||
+                Object.getPrototypeOf(candidate) !== Object.prototype ||
+                Object.getOwnPropertySymbols(candidate).length !== 0) return null;
+        const names = Object.getOwnPropertyNames(candidate);
+        if (names.length !== POLICY_FIELDS.length ||
+                !POLICY_FIELDS.every((field) => names.includes(field))) return null;
+        const descriptors = Object.getOwnPropertyDescriptors(candidate);
+        if (!POLICY_FIELDS.every((field) => descriptors[field]?.enumerable === true &&
+                Object.prototype.hasOwnProperty.call(descriptors[field], 'value'))) return null;
+        const understoodLanguages = snapshotExactList(descriptors.understoodLanguages.value);
+        const subtitleLanguages = snapshotExactList(descriptors.subtitleLanguages.value);
+        if (!understoodLanguages || !subtitleLanguages) return null;
+        const values = Object.fromEntries(POLICY_FIELDS.map((field) => [field, descriptors[field].value]));
+        if (typeof values.mode !== 'string' || typeof values.preferUnderstoodAudio !== 'boolean' ||
+                typeof values.unknownAudio !== 'string' ||
+                typeof values.suspectedPictureSubtitles !== 'string' ||
+                typeof values.allowHearingImpaired !== 'boolean' ||
+                typeof values.allowForcedOnly !== 'boolean' ||
+                typeof values.forcedTranslationsForUnderstoodAudio !== 'boolean') return null;
+        return Object.freeze({ ...values, understoodLanguages, subtitleLanguages });
+    } catch {
+        return null;
+    }
+};
 const readPlayerStoredTuple = (storage) => {
     if (!storage || typeof storage.getItem !== 'function') return null;
     let policyRaw;
@@ -80,8 +114,10 @@ const readPlayerStoredTuple = (storage) => {
     try {
         if (policyRaw !== null) {
             const parsed = JSON.parse(policyRaw);
-            const normalized = policy.normalise(parsed);
-            if (!isCanonicalPolicy(parsed, normalized)) return null;
+            const candidate = snapshotExactPolicy(parsed);
+            if (!candidate) return null;
+            const normalized = policy.normalise(candidate);
+            if (!samePolicy(candidate, normalized)) return null;
             storedPolicy = normalized;
         }
     } catch {
@@ -108,8 +144,12 @@ const result = (subtitle, audio, reason, provenance = null) => Object.freeze({
 });
 
 export function readPlayerSubtitleAutomation({ storage, options } = {}) {
-    const normalized = policy.normalise(options);
-    if (!isCanonicalPolicy(options, normalized)) {
+    const candidate = snapshotExactPolicy(options);
+    if (!candidate) {
+        return result(false, false, 'installation_preference_unverified');
+    }
+    const normalized = policy.normalise(candidate);
+    if (!samePolicy(candidate, normalized)) {
         return result(false, false, 'installation_preference_unverified');
     }
     const before = readPlayerStoredTuple(storage);
@@ -145,4 +185,5 @@ export function readPlayerSubtitleAutomation({ storage, options } = {}) {
         :
         result(false, false, 'installation_preference_unverified');
 }
+
 
