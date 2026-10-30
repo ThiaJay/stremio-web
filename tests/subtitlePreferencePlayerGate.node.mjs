@@ -125,6 +125,28 @@ test('stale or non-canonical policy cannot reuse a receipt with the same languag
     assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
 });
 
+test('caller serialization hooks and hidden authority fields fail closed', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+
+    const disguised = {
+        ...smart,
+        accountHydration: true,
+        toJSON() {
+            return smart;
+        },
+    };
+    assert.equal(JSON.stringify(disguised), JSON.stringify(smart));
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: disguised }).subtitle, false);
+
+    const hidden = { ...smart };
+    Object.defineProperty(hidden, 'accountHydration', { value: true, enumerable: false });
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: hidden }).subtitle, false);
+
+    const inherited = Object.assign(Object.create({ accountHydration: true }), smart);
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: inherited }).subtitle, false);
+});
+
 test('player promotion requires a stable policy, installation and receipt tuple', () => {
     const source = new MemoryStorage();
     assert.ok(record(source));
