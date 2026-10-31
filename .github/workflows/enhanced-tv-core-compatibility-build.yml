@@ -1,0 +1,214 @@
+name: Stremio Core API30 compatibility build
+# Source-bound draft validation only; Actions enabled after inherited-workflow audit; no release, signing, account or device action.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/enhanced-tv-core-compatibility-build.yml'
+      - 'android-tv-shell/tests/audit_core_compatibility_wasm.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: enhanced-tv-core-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-core-api30-route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact Web candidate without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Checkout exact official Stremio Core source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: Stremio/stremio-core
+          ref: 303d7c0bb8bd6d55f11f2f751e55e66040da4f8c
+          path: .compat-core-source
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify exact Core source, build inputs and MIT licence
+        shell: bash
+        run: |
+          set -euo pipefail
+          core=.compat-core-source
+          test "$(git -C "$core" rev-parse HEAD)" = 303d7c0bb8bd6d55f11f2f751e55e66040da4f8c
+          test -z "$(git -C "$core" status --porcelain)"
+          test "$(git -C "$core" hash-object Cargo.lock)" = b2a1e17f54aa57357302e7424211a5a611117208
+          test "$(git -C "$core" hash-object stremio-core-web/rust-toolchain.toml)" = d1be477b169d02ee411c0e8326421b3cfaa062bf
+          test "$(git -C "$core" hash-object stremio-core-web/scripts/build.sh)" = 7d0f9ebbf770b09fa34285d0fde8702e95e17b11
+          test "$(git -C "$core" hash-object stremio-core-web/package-lock.json)" = bbf09a427b099ceeea341197d72f9ffa5e8fbf73
+          test "$(git -C "$core" hash-object stremio-core-web/package.json)" = 5194c6235f317184d12a61d6c28cdc9885db9f81
+          test "$(git -C "$core" hash-object LICENSE.md)" = ef4cc208d355da15e547df1ce30b6c33e2d6de1a
+          grep -Fxq 'The MIT License (MIT)' "$core/LICENSE.md"
+          echo CORE_COMPATIBILITY_EXACT_SOURCE_AND_LICENSE_PASS
+      - name: Set up pinned Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+      - name: Set up pinned pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # signed v6.1.0 target
+        with:
+          version: 11.8.0
+          run_install: false
+      - name: Install exact wasm-pack
+        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+        with:
+          tool: wasm-pack@0.14.0
+      - name: Install and verify exact Rust target
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.95.0 --profile minimal --target wasm32-unknown-unknown
+          rustup component add rust-src --toolchain 1.95.0
+          rustc +1.95.0 --version | grep -Eq '^rustc 1\.95\.0 '
+          rustup target list --toolchain 1.95.0 --installed |
+            grep -Fxq wasm32-unknown-unknown
+          wasm-pack --version | grep -Fxq 'wasm-pack 0.14.0'
+      - name: Build exact Core with reference types disabled
+        shell: bash
+        env:
+          RUSTUP_TOOLCHAIN: '1.95.0'
+          RUSTFLAGS: '-C target-feature=-reference-types'
+          RUSTC_BOOTSTRAP: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p .compat-core-source/.cargo
+          printf '%s\n' '[unstable]' 'build-std = ["std", "panic_abort"]' > .compat-core-source/.cargo/config.toml
+          test "$(wc -l < .compat-core-source/.cargo/config.toml)" -eq 2
+          grep -Fxq '[unstable]' .compat-core-source/.cargo/config.toml
+          grep -Fxq 'build-std = ["std", "panic_abort"]' .compat-core-source/.cargo/config.toml
+          cd .compat-core-source/stremio-core-web
+          npm ci --ignore-scripts
+          ./scripts/build.sh --release
+          test -s stremio_core_web_bg.wasm
+          echo CORE_COMPATIBILITY_EXACT_RUST_STDLIB_REBUILD_PASS
+          test -s stremio_core_web.js
+          test -s bridge.js
+          test -s worker.js
+      - name: Audit rebuilt WASM and modern-engine compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 android-tv-shell/tests/audit_core_compatibility_wasm.py --self-test             .compat-core-source/stremio-core-web/stremio_core_web_bg.wasm
+          node - <<'JS'
+          const fs=require('node:fs');
+          const path='.compat-core-source/stremio-core-web/stremio_core_web_bg.wasm';
+          const bytes=fs.readFileSync(path);
+          WebAssembly.compile(bytes).then(()=>{
+            console.log('CORE_COMPATIBILITY_NODE22_COMPILE_PASS');
+          },()=>{
+            console.log('CORE_COMPATIBILITY_NODE22_COMPILE_FAIL');
+            process.exitCode=2;
+          });
+          JS
+          sha256sum .compat-core-source/stremio-core-web/stremio_core_web_bg.wasm
+      - name: Install original Web lockfile without scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Replace only disposable installed Core package with exact rebuild
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=.compat-core-source/stremio-core-web
+          target=node_modules/@stremio/stremio-core-web
+          test -d "$target"
+          for file in stremio_core_web_bg.wasm stremio_core_web.js bridge.js worker.js; do
+            test -s "$source/$file"
+            test -f "$target/$file"
+            cp "$source/$file" "$target/$file"
+            cmp -s "$source/$file" "$target/$file"
+          done
+          python3 android-tv-shell/tests/audit_core_compatibility_wasm.py             "$target/stremio_core_web_bg.wasm"
+          echo CORE_COMPATIBILITY_DISPOSABLE_PACKAGE_REPLACEMENT_PASS
+      - name: Run existing source, policy and security gates
+        run: |
+          node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
+          pnpm exec jest --runInBand
+          pnpm exec eslint src --max-warnings 287
+          pnpm audit --prod --audit-level moderate
+      - name: Compile complete Enhanced Web with exact compatibility Core
+        run: pnpm exec webpack --mode production
+      - name: Generate bounded original emulator-only media
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          fixture=android-tv-shell/app/src/debug/assets/web/qa-local.mp4
+          mkdir -p "$(dirname "$fixture")"
+          ffmpeg -nostdin -hide_banner -loglevel error             -f lavfi -i 'testsrc2=duration=5:size=320x180:rate=15'             -f lavfi -i 'sine=frequency=440:sample_rate=48000:duration=5'             -c:v libx264 -preset ultrafast -threads 2 -pix_fmt yuv420p             -c:a aac -b:a 96k -movflags +faststart -shortest -y "$fixture"
+          python3 - <<'PY'
+          import pathlib
+          path=pathlib.Path('android-tv-shell/app/src/debug/assets/web/qa-local.mp4')
+          assert 15_000 < path.stat().st_size < 4_000_000
+          print('CORE_COMPATIBILITY_ORIGINAL_MEDIA_BOUND_PASS')
+          PY
+      - name: Bundle exact Web and debug-only Core route instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 android-tv-shell/bundle_verified_web.py             --src build             --dst android-tv-shell/app/src/main/assets/web             --source-sha "$GITHUB_SHA"
+          python3 android-tv-shell/tests/audit_android_source.py
+          test ! -e android-tv-shell/app/src/debug/assets/web/qa-core-route.js
+          cp android-tv-shell/tests/real_core_route_qa.js             android-tv-shell/app/src/debug/assets/web/qa-core-route.js
+          python3 android-tv-shell/tests/audit_core_route_qa.py
+      - name: Bundle exact pinned StremioVideo backend for test-only instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec webpack --config android-tv-shell/tests/video_qa.webpack.config.cjs --mode production --stats errors-only
+          python3 android-tv-shell/tests/audit_real_engine_qa.py
+      - name: Set up pinned JDK
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up pinned Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Install Android SDK and build tools
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;35.0.0' >/dev/null
+      - name: Set up pinned Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # signed v4.4.3 target
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile separate no-release TV host and instrumentation
+        run: |
+          gradle -p android-tv-shell             :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleAndroidTest             --no-daemon --stacktrace
+      - name: Enable KVM for disposable stock TV emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo CORE_COMPATIBILITY_HOLD_NO_KVM; exit 2; }
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            sudo chgrp "$(id -gn)" /dev/kvm
+            sudo chmod g+rw /dev/kvm
+          fi
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Exercise genuine Core and Player route on stock API30 TV
+        shell: bash
+        env:
+          HOSTQA_TARGET_API: '30'
+          HOSTQA_CLEAN_FIXTURE: '1'
+        run: |
+          timeout --signal=TERM --kill-after=10s 540s             bash android-tv-shell/tests/host_media_emulator.sh
+          echo CORE_COMPATIBILITY_API30_GENUINE_CORE_PLAYER_ROUTE_PASS
+      - name: Confirm no release output
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .compat-core-source
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-local.mp4
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-core-route.js
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-video-engine.js
+          rm -f android-tv-shell/app/src/debug/assets/web/qa-*.wasm
+          echo CORE_COMPATIBILITY_SOURCE_ONLY_NO_ARTIFACT_NO_RELEASE
+# No upload, Pages, release, signing, account, provider or personal-device action.
