@@ -1,0 +1,42 @@
+name: Subtitle provenance and HTMLVideo integration source gates
+
+on:
+  pull_request:
+    paths:
+      - 'src/routes/Player/intelligentSubtitles/**'
+      - 'src/routes/Player/useAudio.ts'
+      - 'src/routes/Player/useSubtitles.ts'
+      - 'src/routes/Settings/Player/EnhancedSubtitlePreferences.tsx'
+      - 'tests/subtitlePreference*.node.mjs'
+      - '.github/workflows/subtitle-htmlvideo-integration.yml'
+  push:
+    branches:
+      - integration/subtitle-provenance-htmlvideo-20261101
+
+permissions:
+  contents: read
+
+jobs:
+  source-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+      - name: Verify original pinned Video source
+        shell: bash
+        run: |
+          node - <<'JS'
+          const p=require('./package.json');
+          if (p.dependencies['@stremio/stremio-video'] !== 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66') process.exit(2);
+          if (p.dependencies['@stremio/stremio-core-web'] !== 'file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz') process.exit(3);
+          console.log('SOURCE_PIN_PASS');
+          JS
+      - name: Run subtitle preference and policy regression tests
+        run: |
+          node --test tests/subtitlePreferencePlayerGate.node.mjs tests/subtitlePreferenceSettingsWrite.node.mjs tests/subtitlePreferenceStore.node.mjs
+# Source-only checks. This workflow cannot install, upload or deploy.
