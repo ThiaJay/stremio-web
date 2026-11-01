@@ -4,9 +4,20 @@ import { MultiselectMenu, Toggle } from 'stremio/components';
 import { languageNames } from 'stremio/common';
 import { Option } from '../components';
 import policy = require('../../Player/enhancedSubtitlePolicy');
+import { PLAYER_PREFERENCE_EVENT } from '../../Player/intelligentSubtitles/preference-player-gate.mjs';
+import { commitSubtitleSettingsChoice } from '../../Player/intelligentSubtitles/preference-settings-write.mjs';
+import type { SubtitleSettingsControl } from '../../Player/intelligentSubtitles/preference-settings-write.mjs';
 
 // Unlike Stremio Core account settings these choices remain on this device.
 // Automatic subtitle decisions never persist the current video's track in the account.
+const installationEntropy = (length: number) => {
+    if (typeof globalThis.crypto?.getRandomValues !== 'function') {
+        throw new Error('Secure installation-local entropy unavailable');
+    }
+    const bytes = new Uint8Array(length);
+    globalThis.crypto.getRandomValues(bytes);
+    return bytes;
+};
 const EnhancedSubtitlePreferences = () => {
     const { t } = useTranslation();
     const [values, setValues] = useState(() => policy.read(policy.currentStorage()));
@@ -23,10 +34,34 @@ const EnhancedSubtitlePreferences = () => {
         options.sort((a, b) => a.label.localeCompare(b.label));
         return options;
     }, []);
-    const apply = (patch: Record<string, unknown>) => {
+    const apply = (
+        control: SubtitleSettingsControl,
+        value: string | boolean | null,
+        patch: Record<string, unknown>,
+    ) => {
         const next = policy.normalise({ ...values, ...patch });
-        setValues(next);
-        setSaved(policy.save(policy.currentStorage(), next));
+        const storage = policy.currentStorage();
+        const result = storage === null ? null : commitSubtitleSettingsChoice({
+            storage,
+            randomBytes: installationEntropy,
+            currentOptions: values,
+            nextOptions: next,
+            localChoiceEvent: {
+                surface: 'subtitle-settings',
+                control,
+                value,
+            },
+        });
+        const accepted = result?.ok === true;
+        if (accepted && typeof window !== 'undefined') {
+            try {
+                window.dispatchEvent(new Event(PLAYER_PREFERENCE_EVENT));
+            } catch {
+                // Persistence already succeeded; a remount will re-read the exact stored value.
+            }
+        }
+        setValues(accepted ? next : policy.read(storage));
+        setSaved(accepted);
     };
     const audio = values.understoodLanguages;
     const subtitles = values.subtitleLanguages;
@@ -40,27 +75,27 @@ const EnhancedSubtitlePreferences = () => {
                 { value: 'stremio', label: 'Use original Stremio settings' },
             ],
             value: values.mode,
-            onSelect: (value: string) => apply({ mode: value }),
+            onSelect: (value: string) => apply('automatic-mode', value, { mode: value }),
         },
         firstAudio: {
             options: languageOptions,
             value: audio[0] || 'en',
-            onSelect: (value: string) => apply({ understoodLanguages: [value, ...audio.slice(1).filter((a: string) => a !== value)] }),
+            onSelect: (value: string) => apply('understood-primary', value, { understoodLanguages: [value, ...audio.slice(1).filter((a: string) => a !== value)] }),
         },
         secondAudio: {
             options: optionalLanguages,
             value: audio[1] || 'none',
-            onSelect: (value: string) => apply({ understoodLanguages: value === 'none' ? [audio[0]] : [audio[0], value] }),
+            onSelect: (value: string) => apply('understood-secondary', value === 'none' ? null : value, { understoodLanguages: value === 'none' ? [audio[0]] : [audio[0], value] }),
         },
         firstSubtitle: {
             options: languageOptions,
             value: subtitles[0] || 'en',
-            onSelect: (value: string) => apply({ subtitleLanguages: [value, ...subtitles.slice(1).filter((s: string) => s !== value)] }),
+            onSelect: (value: string) => apply('subtitle-primary', value, { subtitleLanguages: [value, ...subtitles.slice(1).filter((s: string) => s !== value)] }),
         },
         secondSubtitle: {
             options: optionalLanguages,
             value: subtitles[1] || 'none',
-            onSelect: (value: string) => apply({ subtitleLanguages: value === 'none' ? [subtitles[0]] : [subtitles[0], value] }),
+            onSelect: (value: string) => apply('subtitle-secondary', value === 'none' ? null : value, { subtitleLanguages: value === 'none' ? [subtitles[0]] : [subtitles[0], value] }),
         },
         unknownAudio: {
             options: [
@@ -68,7 +103,7 @@ const EnhancedSubtitlePreferences = () => {
                 { value: 'subtitles', label: 'Use my preferred subtitles when language is unknown' },
             ],
             value: values.unknownAudio,
-            onSelect: (value: string) => apply({ unknownAudio: value }),
+            onSelect: (value: string) => apply('unknown-audio', value, { unknownAudio: value }),
         },
         picture: {
             options: [
@@ -76,7 +111,7 @@ const EnhancedSubtitlePreferences = () => {
                 { value: 'ignore', label: 'Use normal automatic selection' },
             ],
             value: values.suspectedPictureSubtitles,
-            onSelect: (value: string) => apply({ suspectedPictureSubtitles: value }),
+            onSelect: (value: string) => apply('picture-subtitles', value, { suspectedPictureSubtitles: value }),
         },
     };
     return (
@@ -97,7 +132,7 @@ const EnhancedSubtitlePreferences = () => {
                 <MultiselectMenu {...menus.secondSubtitle} />
             </Option>
             <Option label={'Prefer spoken audio I understand'} labelDefault={'Prefer spoken audio I understand'}>
-                <Toggle checked={values.preferUnderstoodAudio} onClick={() => apply({ preferUnderstoodAudio: !values.preferUnderstoodAudio })} />
+                <Toggle checked={values.preferUnderstoodAudio} onClick={() => apply('prefer-understood-audio', !values.preferUnderstoodAudio, { preferUnderstoodAudio: !values.preferUnderstoodAudio })} />
             </Option>
             <Option label={'Unknown audio language'} labelDefault={'Unknown audio language'}>
                 <MultiselectMenu {...menus.unknownAudio} />
@@ -106,18 +141,20 @@ const EnhancedSubtitlePreferences = () => {
                 <MultiselectMenu {...menus.picture} />
             </Option>
             <Option label={'Allow hearing impaired captions as a fallback'} labelDefault={'Allow hearing impaired captions as a fallback'}>
-                <Toggle checked={values.allowHearingImpaired} onClick={() => apply({ allowHearingImpaired: !values.allowHearingImpaired })} />
+                <Toggle checked={values.allowHearingImpaired} onClick={() => apply('hearing-impaired', !values.allowHearingImpaired, { allowHearingImpaired: !values.allowHearingImpaired })} />
             </Option>
             <Option label={'Allow forced or partial subtitles as a fallback'} labelDefault={'Allow forced or partial subtitles as a fallback'}>
-                <Toggle checked={values.allowForcedOnly} onClick={() => apply({ allowForcedOnly: !values.allowForcedOnly })} />
+                <Toggle checked={values.allowForcedOnly} onClick={() => apply('forced-only', !values.allowForcedOnly, { allowForcedOnly: !values.allowForcedOnly })} />
             </Option>
             <Option label={'Show forced translations in understood audio'} labelDefault={'Show forced translations in understood audio'}>
-                <Toggle checked={values.forcedTranslationsForUnderstoodAudio} onClick={() => apply({ forcedTranslationsForUnderstoodAudio: !values.forcedTranslationsForUnderstoodAudio })} />
+                <Toggle checked={values.forcedTranslationsForUnderstoodAudio} onClick={() => apply('forced-translations', !values.forcedTranslationsForUnderstoodAudio, { forcedTranslationsForUnderstoodAudio: !values.forcedTranslationsForUnderstoodAudio })} />
             </Option>
-            {!saved && <p role="alert">{t('ENHANCED_SUBTITLE_SETTINGS_SAVE_FAILED', { defaultValue: 'These preferences could not be saved on this device. The current session will keep them.' })}</p>}
+            {!saved && <p role="alert">{t('ENHANCED_SUBTITLE_SETTINGS_SAVE_FAILED', { defaultValue: 'These preferences could not be saved on this device. The unaccepted choice was discarded and the displayed settings were re-read from local storage.' })}</p>}
             <p>{t('ENHANCED_SUBTITLE_PICTURE_ADVISORY', { defaultValue: 'Picture subtitle detection is advisory unless you confirm the text is visible. Automatic selection does not change watched history.' })}</p>
         </>
     );
 };
 
 export default EnhancedSubtitlePreferences;
+
+
