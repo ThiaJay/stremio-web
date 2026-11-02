@@ -34,6 +34,12 @@ jobs:
           const p=require('./package.json');
           if (p.dependencies['@stremio/stremio-video'] !== 'github:ThiaJay/stremio-video#30af605c40229a84bed7b45f7c29908b32881f66') process.exit(2);
           if (p.dependencies['@stremio/stremio-core-web'] !== 'file:vendor/core-web/stremio-stremio-core-web-0.65.0.tgz') process.exit(3);
+          const fs=require('node:fs');
+          const pin='30af605c40229a84bed7b45f7c29908b32881f66';
+          const lock=fs.readFileSync('pnpm-lock.yaml','utf8');
+          const matches=lock.split(pin).length-1;
+          if(matches !== 5) throw Error('Video frozen lockfile pin count drift: '+matches);
+          console.log('VIDEO_LOCKFILE_PIN_PASS');
           console.log('SOURCE_PIN_PASS');
           JS
       - name: Install pinned pnpm
