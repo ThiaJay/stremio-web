@@ -186,4 +186,3 @@ export function readPlayerSubtitleAutomation({ storage, options } = {}) {
         result(false, false, 'installation_preference_unverified');
 }
 
-

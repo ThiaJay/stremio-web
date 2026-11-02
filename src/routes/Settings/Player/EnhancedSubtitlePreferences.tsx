@@ -157,4 +157,3 @@ const EnhancedSubtitlePreferences = () => {
 
 export default EnhancedSubtitlePreferences;
 
-

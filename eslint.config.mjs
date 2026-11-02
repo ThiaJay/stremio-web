@@ -99,6 +99,33 @@ export default [
         }
     },
     {
+        // These two imported Foundation modules are separately pinned by exact
+        // Git blob identity. Keep semantic linting, but do not rewrite their
+        // reviewed formatting or the intentional null-or-undefined comparison.
+        files: [
+            'src/routes/Player/intelligentSubtitles/preference-provenance.mjs',
+            'src/routes/Player/intelligentSubtitles/preference-receipt.mjs',
+        ],
+        rules: {
+            'eqeqeq': 'off',
+            '@stylistic/arrow-parens': 'off',
+            '@stylistic/arrow-spacing': 'off',
+            '@stylistic/block-spacing': 'off',
+            '@stylistic/comma-spacing': 'off',
+            '@stylistic/semi-spacing': 'off',
+            '@stylistic/space-before-blocks': 'off',
+            '@stylistic/no-trailing-spaces': 'off',
+            '@stylistic/function-call-spacing': 'off',
+            '@stylistic/semi': 'off',
+            '@stylistic/no-extra-semi': 'off',
+            '@stylistic/eol-last': 'off',
+            '@stylistic/no-multi-spaces': 'off',
+            '@stylistic/no-multiple-empty-lines': 'off',
+            '@stylistic/indent': 'off',
+            '@stylistic/quotes': 'off',
+        },
+    },
+    {
         rules: {
             'react/display-name': 'off',
         }
