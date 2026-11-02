@@ -38,5 +38,5 @@ jobs:
           JS
       - name: Run subtitle preference and policy regression tests
         run: |
-          node --test tests/subtitlePreferencePlayerGate.node.mjs tests/subtitlePreferenceSettingsWrite.node.mjs tests/subtitlePreferenceStore.node.mjs
+          node --test tests/subtitlePreferencePlayerGate.node.mjs tests/subtitlePreferenceSettingsWrite.node.mjs tests/subtitlePreferenceStore.node.mjs tests/subtitlePreferenceStoreTypes.node.mjs tests/subtitleProvenanceTypes.node.mjs
 # Source-only checks. This workflow cannot install, upload or deploy.
