@@ -8,6 +8,10 @@ on:
       - 'src/routes/Player/useSubtitles.ts'
       - 'src/routes/Settings/Player/EnhancedSubtitlePreferences.tsx'
       - 'tests/subtitlePreference*.node.mjs'
+      - 'tests/subtitleProvenanceTypes.node.mjs'
+      - 'tests/subtitle-provenance-types/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/subtitle-htmlvideo-integration.yml'
   push:
     branches:
