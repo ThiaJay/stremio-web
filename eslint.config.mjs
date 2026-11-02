@@ -107,7 +107,7 @@ export default [
             'src/routes/Player/intelligentSubtitles/preference-receipt.mjs',
         ],
         rules: {
-            'eqeqeq': 'off',
+
             '@stylistic/arrow-parens': 'off',
             '@stylistic/arrow-spacing': 'off',
             '@stylistic/block-spacing': 'off',
@@ -123,6 +123,14 @@ export default [
             '@stylistic/no-multiple-empty-lines': 'off',
             '@stylistic/indent': 'off',
             '@stylistic/quotes': 'off',
+        },
+    },
+    {
+        // Preserve the reviewed null-or-undefined comparison without disabling
+        // equality checks in the other imported provenance module.
+        files: ['src/routes/Player/intelligentSubtitles/preference-provenance.mjs'],
+        rules: {
+            eqeqeq: ['error', 'always', { null: 'ignore' }],
         },
     },
     {
