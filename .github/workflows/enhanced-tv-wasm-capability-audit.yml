@@ -9,8 +9,17 @@ on:
 permissions:
   contents: read
 
+env:
+  CORE_SOURCE_SHA: 303d7c0bb8bd6d55f11f2f751e55e66040da4f8c
+  CORE_WEB_PACKAGE: '0.65.0'
+  PINNED_NIGHTLY: nightly-2026-10-24
+  WASM_BINDGEN_VERSION: '0.2.121'
+  WASM_TOOLS_VERSION: '1.262.0'
+  WASM_TOOLS_X86_64_LINUX_SHA256: '655b8df67d54c3ef9b52fc237c4e94bbfbb5f5f43825245cb0940a7002a9ed65'
+
 jobs:
   pinned-wasm-features:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref != 'feature/enhanced-tv-core-mvp-build-audit-20261025-v1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -114,6 +123,7 @@ jobs:
 
 
   stock-api30-webview:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref != 'feature/enhanced-tv-core-mvp-build-audit-20261025-v1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -222,3 +232,245 @@ jobs:
               sys.exit(2)
           '
           echo STOCK_API30_READ_ONLY_WEBVIEW_VERSION_PROBE_PASS
+
+  exact-core-mvp-build:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'feature/enhanced-tv-core-mvp-build-audit-20261025-v1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact proposed source without retained credentials
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify pinned Web provenance before external source fetch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import json
+          import os
+
+          root = Path.cwd()
+          provenance = json.loads((root / 'vendor/core-web/provenance.json').read_text())
+          assert provenance['coreSourceSha'] == os.environ['CORE_SOURCE_SHA']
+          assert provenance['coreWebPackage'] == os.environ['CORE_WEB_PACKAGE']
+          assert provenance['tarballName'] == 'stremio-stremio-core-web-0.65.0.tgz'
+          assert provenance['sha256'] == (
+              '305cb2fb6c78ff6c719aa4713ddfd719787f38ef1069bb198592e6bda6d78c60'
+          )
+          archive = root / 'vendor/core-web' / provenance['tarballName']
+          assert archive.is_file() and archive.stat().st_size < 3_000_000
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == provenance['sha256']
+          print('EXACT_WEB_PROVENANCE_PASS')
+          PY
+
+      - name: Build exact Core with a rebuilt MVP standard library
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/exact-stremio-core-src"
+          out="$RUNNER_TEMP/exact-stremio-core-mvp"
+          private_log="$RUNNER_TEMP/exact-stremio-core-mvp-private.log"
+          cleanup() {
+            local old=$?
+            trap - EXIT
+            rm -rf "$src" "$out" "$private_log" \
+              "$RUNNER_TEMP/wasm-bindgen-cli" \
+              "$RUNNER_TEMP/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux" \
+              "$RUNNER_TEMP/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux.tar.gz"
+            echo MVP_BUILD_DISPOSABLE_STATE_REMOVED
+            return "$old"
+          }
+          trap cleanup EXIT
+
+          mkdir -p "$src" "$out"
+          git -C "$src" init -q
+          git -C "$src" remote add origin https://github.com/Stremio/stremio-core.git
+          if ! git -C "$src" fetch -q --depth=1 origin "$CORE_SOURCE_SHA" \
+              >"$private_log" 2>&1; then
+            echo HOLD_EXACT_CORE_SOURCE_FETCH
+            exit 2
+          fi
+          git -C "$src" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$src" rev-parse HEAD)" = "$CORE_SOURCE_SHA" || {
+            echo HOLD_CORE_SOURCE_SHA_MISMATCH
+            exit 2
+          }
+          test "$(python3 -c 'import tomllib,sys; print(tomllib.load(open(sys.argv[1],"rb"))["package"]["version"])' \
+            "$src/stremio-core-web/Cargo.toml")" = "$CORE_WEB_PACKAGE" || {
+            echo HOLD_CORE_WEB_PACKAGE_MISMATCH
+            exit 2
+          }
+          test "$(git -C "$src" hash-object LICENSE.md)" = \
+            ef4cc208d355da15e547df1ce30b6c33e2d6de1a || {
+            echo HOLD_CORE_LICENSE_MISMATCH
+            exit 2
+          }
+          echo EXACT_CORE_SOURCE_AND_LICENSE_PASS
+
+          if ! rustup toolchain install "$PINNED_NIGHTLY" --profile minimal \
+              --component rust-src --target wasm32-unknown-unknown \
+              >"$private_log" 2>&1; then
+            echo HOLD_PINNED_NIGHTLY_UNAVAILABLE
+            exit 2
+          fi
+          test "$(rustc +"$PINNED_NIGHTLY" --version | awk '{print $1}')" = rustc
+          echo PINNED_NIGHTLY_WITH_RUST_SRC_PASS
+
+          if ! cargo +"$PINNED_NIGHTLY" install wasm-bindgen-cli \
+              --version "$WASM_BINDGEN_VERSION" --locked \
+              --root "$RUNNER_TEMP/wasm-bindgen-cli" \
+              >"$private_log" 2>&1; then
+            echo HOLD_PINNED_WASM_BINDGEN_INSTALL
+            exit 2
+          fi
+          export PATH="$RUNNER_TEMP/wasm-bindgen-cli/bin:$PATH"
+          test "$(wasm-bindgen --version | awk '{print $2}')" = "$WASM_BINDGEN_VERSION" || {
+            echo HOLD_WASM_BINDGEN_VERSION_MISMATCH
+            exit 2
+          }
+          echo PINNED_WASM_BINDGEN_PASS
+
+          wasm_tools_archive="$RUNNER_TEMP/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux.tar.gz"
+          if ! curl --fail --silent --show-error --location --retry 3 \
+              --proto '=https' \
+              "https://github.com/bytecodealliance/wasm-tools/releases/download/v${WASM_TOOLS_VERSION}/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux.tar.gz" \
+              --output "$wasm_tools_archive"; then
+            echo HOLD_PINNED_WASM_TOOLS_DOWNLOAD
+            exit 2
+          fi
+          printf '%s  %s\\n' "$WASM_TOOLS_X86_64_LINUX_SHA256" "$wasm_tools_archive" | \
+            sha256sum --check --status || {
+              echo HOLD_PINNED_WASM_TOOLS_HASH
+              exit 2
+            }
+          tar --extract --gzip --file "$wasm_tools_archive" --directory "$RUNNER_TEMP"
+          export PATH="$RUNNER_TEMP/wasm-tools-${WASM_TOOLS_VERSION}-x86_64-linux:$PATH"
+          test "$(wasm-tools --version | awk '{print $2}')" = "$WASM_TOOLS_VERSION" || {
+            echo HOLD_WASM_TOOLS_VERSION_MISMATCH
+            exit 2
+          }
+          echo PINNED_WASM_TOOLS_PASS
+
+          export CARGO_INCREMENTAL=0
+          export RUSTFLAGS="-Ctarget-cpu=mvp --remap-path-prefix=$src=/stremio-core"
+          if ! cargo +"$PINNED_NIGHTLY" build \
+              --locked \
+              --manifest-path "$src/Cargo.toml" \
+              -Zbuild-std=panic_abort,std \
+              --target wasm32-unknown-unknown \
+              --release \
+              --package stremio-core-web \
+              >"$private_log" 2>&1; then
+            echo HOLD_EXACT_CORE_MVP_BUILD
+            exit 2
+          fi
+          built="$src/target/wasm32-unknown-unknown/release/stremio_core_web.wasm"
+          test -s "$built" && test "$(stat -c %s "$built")" -lt 15000000 || {
+            echo HOLD_EXACT_CORE_MVP_OUTPUT
+            exit 2
+          }
+          echo MVP_STD_REBUILD_PASS
+
+          if ! wasm-bindgen --target web --no-typescript \
+              --out-name stremio_core_web --out-dir "$out" "$built" \
+              >"$private_log" 2>&1; then
+            echo HOLD_EXACT_CORE_MVP_BINDGEN
+            exit 2
+          fi
+          test -s "$out/stremio_core_web_bg.wasm" \
+            && test -s "$out/stremio_core_web.js" || {
+              echo HOLD_EXACT_CORE_MVP_BINDGEN_OUTPUT
+              exit 2
+            }
+          echo MVP_BINDGEN_PASS
+
+          if ! wasm-tools validate --features=mvp "$out/stremio_core_web_bg.wasm"; then
+            echo HOLD_MVP_BYTECODE_VALIDATION
+            exit 2
+          fi
+          echo MVP_BYTECODE_VALIDATION_PASS
+
+          export MVP_WASM="$out/stremio_core_web_bg.wasm"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          wasm = Path(os.environ['MVP_WASM']).read_bytes()
+          assert 100_000 < len(wasm) < 15_000_000
+          assert wasm[:8] == b'\0asm\1\0\0\0'
+
+          def uleb(data, offset):
+              result = 0
+              for shift in range(0, 35, 7):
+                  assert offset < len(data)
+                  byte = data[offset]
+                  offset += 1
+                  result |= (byte & 127) << shift
+                  if not byte & 128:
+                      return result, offset
+              raise AssertionError('oversized integer')
+
+          def read_name(data, offset):
+              size, offset = uleb(data, offset)
+              assert size <= len(data) - offset
+              return bytes(data[offset:offset + size]).decode('utf-8'), offset + size
+
+          features = None
+          offset = 8
+          while offset < len(wasm):
+              section_id = wasm[offset]
+              offset += 1
+              size, offset = uleb(wasm, offset)
+              assert size <= len(wasm) - offset
+              section = memoryview(wasm)[offset:offset + size]
+              offset += size
+              if section_id != 0:
+                  continue
+              section_name, cursor = read_name(section, 0)
+              if section_name != 'target_features':
+                  continue
+              assert features is None
+              count, cursor = uleb(section, cursor)
+              assert count < 100
+              features = []
+              for _ in range(count):
+                  assert cursor < len(section)
+                  sign = chr(section[cursor])
+                  cursor += 1
+                  feature, cursor = read_name(section, cursor)
+                  assert sign in '+-' and 0 < len(feature) < 64
+                  features.append((sign, feature))
+              assert cursor == len(section)
+
+          allow = {
+              'atomics', 'bulk-memory', 'bulk-memory-opt',
+              'call-indirect-overlong', 'exception-handling', 'extended-const',
+              'fp16', 'gc', 'memory64', 'multi-memory', 'multimemory', 'multivalue',
+              'mutable-globals', 'nontrapping-fptoint', 'reference-types',
+              'relaxed-simd', 'sign-ext', 'simd128', 'tail-call',
+              'typed-funcref', 'wide-arithmetic',
+          }
+          assert features is None or all(feature in allow for _, feature in features)
+          enabled = {feature for sign, feature in (features or []) if sign == '+'}
+          assert 'reference-types' not in enabled
+          assert 'multivalue' not in enabled
+          print('MVP_REFERENCE_TYPES_DISABLED_PASS')
+          print('MVP_MULTIVALUE_DISABLED_PASS')
+          print('MVP_TARGET_FEATURE_METADATA_REVIEWED')
+          PY
+
+          node --check "$out/stremio_core_web.js"
+          node - <<'JS'
+          const fs = require('fs');
+          const bytes = fs.readFileSync(process.env.MVP_WASM);
+          WebAssembly.compile(bytes).then(
+            () => console.log('MVP_NODE22_COMPILE_PASS'),
+            () => { console.log('HOLD_MVP_NODE22_COMPILE'); process.exitCode = 2; }
+          );
+          JS
+          echo EXACT_CORE_MVP_BUILD_AUDIT_COMPLETE
