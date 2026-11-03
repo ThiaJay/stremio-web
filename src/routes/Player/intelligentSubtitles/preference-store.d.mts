@@ -1,4 +1,7 @@
-import type { SubtitlePreferenceProvenance } from './preference-provenance.mjs';
+import type {
+    SubtitlePreference,
+    SubtitlePreferenceProvenance,
+} from './preference-provenance.mjs';
 
 export type InstallationLocalStorage = {
     getItem(key: string): string | null;

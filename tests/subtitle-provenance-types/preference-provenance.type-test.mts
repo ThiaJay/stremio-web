@@ -1,8 +1,14 @@
 import type {
+    SubtitlePreference,
     SubtitlePreferenceBinding,
     SubtitlePreferenceProvenance,
 } from './preference-provenance.mjs';
 
+const preference: SubtitlePreference = {
+    enabled: true,
+    language: 'eng',
+    source: null,
+};
 const binding: SubtitlePreferenceBinding = {
     sessionEnabled: true,
     sessionLanguage: 'eng',
@@ -32,4 +38,7 @@ const missingSurface: SubtitlePreferenceProvenance = { schemaVersion: 1, kind: '
 // @ts-expect-error stored evidence cannot carry an explicit-choice UI claim.
 const forgedStoredSurface: SubtitlePreferenceProvenance = { schemaVersion: 1, kind: 'same-installation-setting', installationDigest: 'a'.repeat(64), preferenceRevision: 1, surface: 'first-run', binding };
 
-void [stored, explicit, missingSurface, forgedStoredSurface];
+// @ts-expect-error account hydration is not part of the installation-local preference contract.
+const forgedPreference: SubtitlePreference = { enabled: true, accountHydrated: true };
+
+void [preference, stored, explicit, missingSurface, forgedStoredSurface, forgedPreference];

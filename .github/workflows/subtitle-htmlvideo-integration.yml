@@ -71,7 +71,7 @@ jobs:
           node --test tests/subtitlePreferencePlayerGate.node.mjs tests/subtitlePreferenceSettingsWrite.node.mjs tests/subtitlePreferenceStore.node.mjs tests/subtitlePreferenceStoreTypes.node.mjs tests/subtitleProvenanceTypes.node.mjs
       - name: Compile subtitle provenance declaration contracts
         run: |
-          pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext tests/subtitle-provenance-types/globals.d.mts tests/subtitle-provenance-types/preference-provenance.type-test.mts tests/subtitle-provenance-types/preference-settings-write.type-test.mts tests/subtitle-provenance-types/preference-store.type-test.mts
+          pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext tests/subtitle-provenance-types/globals.d.mts tests/subtitle-provenance-types/preference-provenance.d.mts tests/subtitle-provenance-types/preference-receipt.d.mts tests/subtitle-provenance-types/preference-provenance.type-test.mts tests/subtitle-provenance-types/preference-settings-write.type-test.mts tests/subtitle-provenance-types/preference-store.type-test.mts
       - name: Run existing subtitle and skip policies
         run: node --test tests/enhancedSubtitlesPolicy.node.mjs tests/enhancedSkipModes.node.mjs
       - name: Existing Web suite and lint

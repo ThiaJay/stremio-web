@@ -4,6 +4,11 @@ export type SubtitlePreferenceBinding = {
     globalLanguage: string | null;
     sessionSource: 'embedded' | 'external' | null;
 };
+export type SubtitlePreference = {
+    enabled?: boolean | null;
+    language?: string | null;
+    source?: 'embedded' | 'external' | null;
+};
 type SubtitlePreferenceProvenanceBase = {
     schemaVersion: 1;
     installationDigest: string;

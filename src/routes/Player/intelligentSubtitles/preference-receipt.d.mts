@@ -1,4 +1,5 @@
 import type {
+    SubtitlePreference,
     SubtitlePreferenceBinding,
     SubtitlePreferenceProvenance,
 } from './preference-provenance.mjs';

@@ -11,15 +11,16 @@ const gitBlob = async (name) => {
     .digest('hex');
 };
 
-test('source declarations retain exact Foundation identities', async () => {
-  assert.equal(await gitBlob('preference-provenance.d.mts'), '568addbd4dfc0caffdaa0e9636b0ffa518048c05');
-  assert.equal(await gitBlob('preference-receipt.d.mts'), '3945f9afd6ebf4610dfbfac64664961a4647259d');
+test('source declarations retain current exact Foundation identities', async () => {
+  assert.equal(await gitBlob('preference-provenance.d.mts'), '0d988eb623279118ca21747d7f5db5960c4d400b');
+  assert.equal(await gitBlob('preference-receipt.d.mts'), 'd01af99e9ea5c60f999c26b9c4597c6592341763');
 });
 
 test('store declaration exposes only the closed local-choice API', async () => {
   const declaration = await readFile(new URL("../src/routes/Player/intelligentSubtitles/preference-store.d.mts", import.meta.url), 'utf8');
   assert.match(declaration, /surface: 'first-run' \| 'subtitle-settings'/);
   assert.match(declaration, /sessionPreference: SubtitlePreference & \{ enabled: true \}/);
+  assert.match(declaration, /import type \{[\s\S]*SubtitlePreference,[\s\S]*SubtitlePreferenceProvenance/);
   assert.match(declaration, /randomBytes: SubtitlePreferenceEntropySource/);
   assert.doesNotMatch(declaration, /account|migration|deviceId|packageName/i);
 });

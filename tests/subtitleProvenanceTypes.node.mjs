@@ -13,13 +13,15 @@ const gitBlob = async (name) => {
 };
 
 test('Web compiler input is bound to the reviewed Foundation declarations', async () => {
-    assert.equal(await gitBlob('preference-provenance.d.mts'), '568addbd4dfc0caffdaa0e9636b0ffa518048c05');
-    assert.equal(await gitBlob('preference-provenance.type-test.mts'), 'ce08c988effaf206e25fe71843cadc655b33ba81');
+    assert.equal(await gitBlob('preference-provenance.d.mts'), '0d988eb623279118ca21747d7f5db5960c4d400b');
+    assert.equal(await gitBlob('preference-receipt.d.mts'), 'd01af99e9ea5c60f999c26b9c4597c6592341763');
+    assert.equal(await gitBlob('preference-provenance.type-test.mts'), '3617ac458ea710bf37f06e33bcb3db87b9dc9347');
 });
 
 test('negative compiler cases remain present and exact', async () => {
     const fixture = await readFile(new URL('preference-provenance.type-test.mts', root), 'utf8');
-    assert.equal((fixture.match(/@ts-expect-error/g) || []).length, 2);
+    assert.equal((fixture.match(/@ts-expect-error/g) || []).length, 3);
     assert.match(fixture, /missingSurface/);
     assert.match(fixture, /forgedStoredSurface/);
+    assert.match(fixture, /forgedPreference/);
 });

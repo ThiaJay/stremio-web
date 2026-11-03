@@ -1,12 +1,6 @@
 export {};
 
 declare global {
-    type SubtitlePreference = {
-        enabled: boolean;
-        language?: string | null;
-        source?: 'embedded' | 'external';
-    };
-
     // Exact structural fields consumed by the existing Enhanced policy
     // declaration. These test-only globals mirror the current Player track
     // surfaces so the isolated NodeNext fixture checks the imported policy
