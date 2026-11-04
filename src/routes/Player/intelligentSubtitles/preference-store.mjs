@@ -1,4 +1,7 @@
-import { verifySubtitlePreferenceProvenance } from './preference-provenance.mjs';
+import {
+    subtitlePreferenceSnapshot,
+    verifySubtitlePreferenceProvenance,
+} from './preference-provenance.mjs';
 import {
     issueExplicitLocalChoiceReceipt,
     promoteStoredPreferenceReceipt,
@@ -134,7 +137,9 @@ export function loadStoredPreference({ storage, sessionPreference, globalLanguag
 export function recordExplicitLocalChoice({
     storage, randomBytes, sessionPreference, globalLanguage, surface,
 } = {}) {
-    if (!hasStorage(storage) || !SURFACES.has(surface) || sessionPreference?.enabled !== true) return null;
+    const preference = subtitlePreferenceSnapshot(sessionPreference);
+    if (!hasStorage(storage) || !SURFACES.has(surface) || !preference ||
+            preference.enabled !== true) return null;
     const digestBefore = safeGet(storage, INSTALLATION_DIGEST_KEY);
     const receiptBefore = safeGet(storage, PREFERENCE_RECEIPT_KEY);
     if (digestBefore === undefined || receiptBefore === undefined) return null;
@@ -161,7 +166,7 @@ export function recordExplicitLocalChoice({
     const receipt = issueExplicitLocalChoiceReceipt({
         activeInstallationDigest: installationDigest,
         preferenceRevision,
-        sessionPreference,
+        sessionPreference: preference,
         globalLanguage,
         localChoiceEvent: {
             installationDigest,
@@ -206,7 +211,7 @@ export function recordExplicitLocalChoice({
     const parsed = parseEnvelope(receiptReadback, installationDigest);
     const promoted = parsed && promoteStoredPreferenceReceipt({
         activeInstallationDigest: installationDigest,
-        sessionPreference,
+        sessionPreference: preference,
         globalLanguage,
         storedReceipt: parsed.receipt,
         storageReadback: {

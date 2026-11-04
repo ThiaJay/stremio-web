@@ -22,8 +22,8 @@ const enabled = Object.freeze({ enabled: true, language: 'eng', source: 'embedde
 
 test('Foundation runtime modules retain their exact reviewed Git blob identities', async () => {
   for (const [name, expected] of [
-    ['preference-provenance.mjs', 'e63e9a35ec9e0bdeab0de17debaf5a3ce929d8d4'],
-    ['preference-receipt.mjs', 'f1f5adaadc552f97b598bf8db48685d86782853e'],
+    ['preference-provenance.mjs', 'c3cd7f7695222426caa7746a8b1ad1f451d8a28a'],
+    ['preference-receipt.mjs', 'a5d3a1d9ed7950ba90dd8e511914b07eb6d2e508'],
   ]) {
     const content = await readFile(new URL("../src/routes/Player/intelligentSubtitles/" + name, import.meta.url));
     const actual = createHash('sha1').update(`blob ${content.byteLength}\0`).update(content).digest('hex');
@@ -205,6 +205,37 @@ test('inputs are not mutated and storage source names no accounts or network API
   assert.deepEqual(preference, before);
   const source = await readFile(new URL('../src/routes/Player/intelligentSubtitles/preference-store.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|account|deviceId|packageName/i);
+});
+
+test('accessor-backed and custom-prototype preferences fail before storage or getter access', async () => {
+  const { recordExplicitLocalChoice } = await fresh();
+  let reads = 0;
+  const accessorPreference = {};
+  Object.defineProperty(accessorPreference, 'enabled', {
+    enumerable: true,
+    get() { reads += 1; return true; },
+  });
+  const accessorStorage = memoryStorage();
+  assert.equal(recordExplicitLocalChoice({
+    storage: accessorStorage,
+    randomBytes: entropy(),
+    sessionPreference: accessorPreference,
+    surface: 'first-run',
+  }), null);
+  assert.equal(reads, 0);
+  assert.equal(accessorStorage.operations.length, 0);
+
+  const inheritedPreference = Object.assign(Object.create({
+    enabled: true, language: 'eng', source: 'embedded',
+  }), { enabled: true, language: 'eng', source: 'embedded' });
+  const inheritedStorage = memoryStorage();
+  assert.equal(recordExplicitLocalChoice({
+    storage: inheritedStorage,
+    randomBytes: entropy(),
+    sessionPreference: inheritedPreference,
+    surface: 'subtitle-settings',
+  }), null);
+  assert.equal(inheritedStorage.operations.length, 0);
 });
 
 

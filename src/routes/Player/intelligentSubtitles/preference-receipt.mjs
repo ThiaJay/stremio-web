@@ -1,16 +1,30 @@
 import {
   preferenceBinding,
+  subtitlePreferenceSnapshot,
   verifySubtitlePreferenceProvenance,
 } from './preference-provenance.mjs';
 
 const digest = /^[0-9a-f]{64}$/;
 const surfaces = new Set(['first-run', 'subtitle-settings']);
-const exactKeys = (value, keys) => value && typeof value === 'object' &&
-  !Array.isArray(value) && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
+const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+const dataRecord = (value, keys) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return null;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const actual = Reflect.ownKeys(descriptors);
+  if (actual.length !== keys.length || keys.some((key) => !actual.includes(key)) ||
+      actual.some((key) => typeof key !== 'string' || !descriptors[key].enumerable ||
+        !own(descriptors[key], 'value'))) return null;
+  return Object.freeze(Object.fromEntries(actual.map((key) => [key, descriptors[key].value])));
+};
 const revision = (value) => Number.isSafeInteger(value) && value > 0;
 const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'sessionSource'];
-const sameBinding = (left, right) => exactKeys(left, bindingKeys) && exactKeys(right, bindingKeys) &&
-  bindingKeys.every((key) => left[key] === right[key]);
+const sameBinding = (left, right) => {
+  const leftRecord = dataRecord(left, bindingKeys);
+  const rightRecord = dataRecord(right, bindingKeys);
+  return leftRecord && rightRecord && bindingKeys.every((key) => leftRecord[key] === rightRecord[key]);
+};
 const freezeReceipt = (receipt) => Object.freeze({
   ...receipt,
   binding: Object.freeze({ ...receipt.binding }),
@@ -23,22 +37,24 @@ export function issueExplicitLocalChoiceReceipt({
   activeInstallationDigest, preferenceRevision, sessionPreference,
   globalLanguage, localChoiceEvent,
 } = {}) {
-  if (!digest.test(activeInstallationDigest || '') || !revision(preferenceRevision)) return null;
-  if (!exactKeys(localChoiceEvent, [
+  const preference = subtitlePreferenceSnapshot(sessionPreference);
+  const choiceEvent = dataRecord(localChoiceEvent, [
     'installationDigest', 'preferenceRevision', 'surface', 'choice',
-  ])) return null;
-  if (localChoiceEvent.installationDigest !== activeInstallationDigest ||
-      localChoiceEvent.preferenceRevision !== preferenceRevision ||
-      !surfaces.has(localChoiceEvent.surface) || localChoiceEvent.choice !== 'enabled' ||
-      sessionPreference?.enabled !== true) return null;
+  ]);
+  if (!digest.test(activeInstallationDigest || '') || !revision(preferenceRevision)) return null;
+  if (!preference || !choiceEvent) return null;
+  if (choiceEvent.installationDigest !== activeInstallationDigest ||
+      choiceEvent.preferenceRevision !== preferenceRevision ||
+      !surfaces.has(choiceEvent.surface) || choiceEvent.choice !== 'enabled' ||
+      preference.enabled !== true) return null;
   return freezeReceipt({
     schemaVersion: 1,
     kind: 'explicit-local-choice',
     installationDigest: activeInstallationDigest,
     preferenceRevision,
-    surface: localChoiceEvent.surface,
+    surface: choiceEvent.surface,
     choice: 'enabled',
-    binding: preferenceBinding({ sessionPreference, globalLanguage }),
+    binding: preferenceBinding({ sessionPreference: preference, globalLanguage }),
   });
 }
 
@@ -48,26 +64,32 @@ export function promoteStoredPreferenceReceipt({
   activeInstallationDigest, sessionPreference, globalLanguage,
   storedReceipt, storageReadback,
 } = {}) {
-  const storedKeys = storedReceipt?.kind === 'explicit-local-choice'
+  const preference = subtitlePreferenceSnapshot(sessionPreference);
+  const storedKindRecord = dataRecord(storedReceipt, storedReceipt && typeof storedReceipt === 'object'
+    ? Reflect.ownKeys(Object.getOwnPropertyDescriptors(storedReceipt)).filter((key) => typeof key === 'string')
+    : []);
+  if (!preference || !storedKindRecord) return null;
+  const storedKeys = storedKindRecord.kind === 'explicit-local-choice'
     ? ['schemaVersion', 'kind', 'installationDigest', 'preferenceRevision', 'surface', 'choice', 'binding']
     : ['schemaVersion', 'kind', 'installationDigest', 'preferenceRevision', 'binding'];
-  if (!exactKeys(storedReceipt, storedKeys)) return null;
-  if (!verifySubtitlePreferenceProvenance({
-    activeInstallationDigest, sessionPreference, globalLanguage,
-    preferenceProvenance: storedReceipt,
-  })) return null;
-  if (!exactKeys(storageReadback, [
+  const stored = dataRecord(storedReceipt, storedKeys);
+  const readback = dataRecord(storageReadback, [
     'scope', 'installationDigest', 'preferenceRevision', 'binding',
-  ])) return null;
-  if (storageReadback.scope !== 'installation-local' ||
-      storageReadback.installationDigest !== activeInstallationDigest ||
-      storageReadback.preferenceRevision !== storedReceipt.preferenceRevision ||
-      !sameBinding(storageReadback.binding, storedReceipt.binding)) return null;
+  ]);
+  if (!stored || !readback) return null;
+  if (!verifySubtitlePreferenceProvenance({
+    activeInstallationDigest, sessionPreference: preference, globalLanguage,
+    preferenceProvenance: stored,
+  })) return null;
+  if (readback.scope !== 'installation-local' ||
+      readback.installationDigest !== activeInstallationDigest ||
+      readback.preferenceRevision !== stored.preferenceRevision ||
+      !sameBinding(readback.binding, stored.binding)) return null;
   return freezeReceipt({
     schemaVersion: 1,
     kind: 'same-installation-setting',
     installationDigest: activeInstallationDigest,
-    preferenceRevision: storedReceipt.preferenceRevision,
-    binding: storedReceipt.binding,
+    preferenceRevision: stored.preferenceRevision,
+    binding: stored.binding,
   });
 }
