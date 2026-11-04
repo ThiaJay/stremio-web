@@ -12,16 +12,20 @@ const evidenceKeys = [
 ];
 const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'sessionSource'];
 const dataRecord = (value, allowedKeys, requiredKeys = undefined) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return null;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Reflect.ownKeys(descriptors);
-  if (keys.some((key) => typeof key !== 'string' || !allowedKeys.includes(key) ||
-      !descriptors[key].enumerable || !own(descriptors[key], 'value'))) return null;
-  if (requiredKeys && (keys.length !== requiredKeys.length ||
-      requiredKeys.some((key) => !keys.includes(key)))) return null;
-  return Object.freeze(Object.fromEntries(keys.map((key) => [key, descriptors[key].value])));
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const keys = Reflect.ownKeys(descriptors);
+    if (keys.some((key) => typeof key !== 'string' || !allowedKeys.includes(key) ||
+        !descriptors[key].enumerable || !own(descriptors[key], 'value'))) return null;
+    if (requiredKeys && (keys.length !== requiredKeys.length ||
+        requiredKeys.some((key) => !keys.includes(key)))) return null;
+    return Object.freeze(Object.fromEntries(keys.map((key) => [key, descriptors[key].value])));
+  } catch {
+    return null;
+  }
 };
 const text = (value) => typeof value === 'string' && value.trim()
   ? value.trim().toLowerCase().replaceAll('_', '-') : null;
@@ -71,7 +75,7 @@ export function verifySubtitlePreferenceProvenance({
     : ['schemaVersion', 'kind', 'installationDigest', 'preferenceRevision', 'binding'];
   if (Reflect.ownKeys(evidence).length !== requiredEvidenceKeys.length ||
       requiredEvidenceKeys.some((key) => !own(evidence, key))) return false;
-  if (!digest.test(activeInstallationDigest || '') ||
+  if (typeof activeInstallationDigest !== 'string' || !digest.test(activeInstallationDigest) ||
       evidence.installationDigest !== activeInstallationDigest) return false;
   if (!Number.isSafeInteger(evidence.preferenceRevision) || evidence.preferenceRevision < 1) return false;
   if (!sameBinding(evidence.binding, expected)) return false;

@@ -13,6 +13,15 @@ import {
     PLAYER_STORAGE_KEYS,
     readPlayerSubtitleAutomation,
 } from '../src/routes/Player/intelligentSubtitles/preference-player-gate.mjs';
+import {
+    needsSubtitlePreferenceChoice,
+    preferenceBinding,
+    verifySubtitlePreferenceProvenance,
+} from '../src/routes/Player/intelligentSubtitles/preference-provenance.mjs';
+import {
+    issueExplicitLocalChoiceReceipt,
+    promoteStoredPreferenceReceipt,
+} from '../src/routes/Player/intelligentSubtitles/preference-receipt.mjs';
 
 class MemoryStorage {
     constructor(entries = []) {
@@ -45,6 +54,43 @@ class DriftAfterPromotionStorage extends MemoryStorage {
 
 const entropy = (length) => new Uint8Array(length).fill(0x2a);
 const smart = policy.normalise(null);
+
+test('hostile proxy preference records fail closed instead of escaping the provenance boundary', () => {
+    const digest = 'a'.repeat(64);
+    const sessionPreference = { enabled: true, language: 'eng' };
+    const globalLanguage = 'eng';
+    const throwingProxy = (label) => new Proxy({}, {
+        getPrototypeOf() { throw new Error(label); },
+    });
+    const receipt = {
+        schemaVersion: 1,
+        kind: 'same-installation-setting',
+        installationDigest: digest,
+        preferenceRevision: 1,
+        binding: preferenceBinding({ sessionPreference, globalLanguage }),
+    };
+
+    assert.equal(needsSubtitlePreferenceChoice({
+        sessionPreference: throwingProxy('preference'), globalLanguage,
+    }), true);
+    assert.equal(verifySubtitlePreferenceProvenance({
+        sessionPreference, globalLanguage, activeInstallationDigest: digest,
+        preferenceProvenance: throwingProxy('evidence'),
+    }), false);
+    assert.equal(issueExplicitLocalChoiceReceipt({
+        activeInstallationDigest: digest, preferenceRevision: 1,
+        sessionPreference, globalLanguage, localChoiceEvent: throwingProxy('event'),
+    }), null);
+    assert.equal(promoteStoredPreferenceReceipt({
+        activeInstallationDigest: digest, sessionPreference, globalLanguage,
+        storedReceipt: throwingProxy('receipt'), storageReadback: {},
+    }), null);
+    assert.equal(promoteStoredPreferenceReceipt({
+        activeInstallationDigest: digest, sessionPreference, globalLanguage,
+        storedReceipt: receipt, storageReadback: throwingProxy('readback'),
+    }), null);
+});
+
 const record = (storage, options = smart) => {
     storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
     return recordExplicitLocalChoice({
