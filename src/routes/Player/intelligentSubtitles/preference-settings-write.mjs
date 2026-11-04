@@ -145,7 +145,7 @@ export function commitSubtitleSettingsChoice({
     }
     const policyReadback = safeGet(storage, policy.STORAGE_KEY);
     if (policyReadback !== policyRaw) {
-        return fail(policyReadback === undefined ? policyWrite : [[policy.STORAGE_KEY, policyReadback]]);
+        return fail();
     }
 
     if (nextOptions.mode === 'off' || nextOptions.mode === 'stremio') {

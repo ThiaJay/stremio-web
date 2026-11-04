@@ -175,7 +175,7 @@ test('receipt write refusal restores a newly created identity', async () => {
   assert.deepEqual(storage.snapshot(), {});
 });
 
-test('mutated receipt readback triggers verified rollback', async () => {
+test('unknown immediate receipt readback drift is never overwritten by rollback', async () => {
   const { recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY } = await fresh();
   const original = {
     [INSTALLATION_DIGEST_KEY]: 'aa'.repeat(32),
@@ -183,14 +183,20 @@ test('mutated receipt readback triggers verified rollback', async () => {
   const storage = memoryStorage(original);
   const originalSet = storage.setItem;
   let mutate = true;
+  let driftedReceipt;
   storage.setItem = (key, value) => {
-    originalSet.call(storage, key, mutate && key === PREFERENCE_RECEIPT_KEY ? `${value} ` : value);
+    const stored = mutate && key === PREFERENCE_RECEIPT_KEY ? `${value} ` : value;
+    if (key === PREFERENCE_RECEIPT_KEY) driftedReceipt = stored;
+    originalSet.call(storage, key, stored);
     if (key === PREFERENCE_RECEIPT_KEY) mutate = false;
   };
   assert.equal(recordExplicitLocalChoice({
     storage, randomBytes: entropy(), sessionPreference: enabled, surface: 'first-run',
   }), null);
-  assert.deepEqual(storage.snapshot(), original);
+  assert.deepEqual(storage.snapshot(), {
+    ...original,
+    [PREFERENCE_RECEIPT_KEY]: driftedReceipt,
+  });
 });
 
 test('inputs are not mutated and storage source names no accounts or network APIs', async () => {

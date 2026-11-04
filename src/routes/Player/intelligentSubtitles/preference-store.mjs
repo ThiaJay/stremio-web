@@ -202,10 +202,7 @@ export function recordExplicitLocalChoice({
     const digestReadback = safeGet(storage, INSTALLATION_DIGEST_KEY);
     const receiptReadback = safeGet(storage, PREFERENCE_RECEIPT_KEY);
     if (digestReadback !== installationDigest || receiptReadback !== raw) {
-        rollbackTransaction([
-            [INSTALLATION_DIGEST_KEY, digestReadback],
-            [PREFERENCE_RECEIPT_KEY, receiptReadback],
-        ].filter(([, value]) => value !== undefined));
+        rollbackTransaction();
         return null;
     }
     const parsed = parseEnvelope(receiptReadback, installationDigest);
