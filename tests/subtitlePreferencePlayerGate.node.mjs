@@ -91,6 +91,39 @@ test('hostile proxy preference records fail closed instead of escaping the prove
     }), null);
 });
 
+test('hostile top-level provenance and receipt requests fail closed without getter execution', () => {
+    const revocable = Proxy.revocable({}, {});
+    revocable.revoke();
+    assert.deepEqual(preferenceBinding(revocable.proxy), {
+        sessionEnabled: null,
+        sessionLanguage: null,
+        globalLanguage: null,
+        sessionSource: null,
+    });
+    assert.equal(needsSubtitlePreferenceChoice(revocable.proxy), true);
+    assert.equal(verifySubtitlePreferenceProvenance(revocable.proxy), false);
+    assert.equal(issueExplicitLocalChoiceReceipt(revocable.proxy), null);
+    assert.equal(promoteStoredPreferenceReceipt(revocable.proxy), null);
+
+    let reads = 0;
+    const accessorRequest = {};
+    Object.defineProperty(accessorRequest, 'sessionPreference', {
+        enumerable: true,
+        get() { reads += 1; return { enabled: true, language: 'eng' }; },
+    });
+    assert.deepEqual(preferenceBinding(accessorRequest), {
+        sessionEnabled: null,
+        sessionLanguage: null,
+        globalLanguage: null,
+        sessionSource: null,
+    });
+    assert.equal(needsSubtitlePreferenceChoice(accessorRequest), true);
+    assert.equal(verifySubtitlePreferenceProvenance(accessorRequest), false);
+    assert.equal(issueExplicitLocalChoiceReceipt(accessorRequest), null);
+    assert.equal(promoteStoredPreferenceReceipt(accessorRequest), null);
+    assert.equal(reads, 0);
+});
+
 const record = (storage, options = smart) => {
     storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
     return recordExplicitLocalChoice({

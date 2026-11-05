@@ -11,14 +11,15 @@ const evidenceKeys = [
   'surface', 'choice', 'binding',
 ];
 const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'sessionSource'];
-const dataRecord = (value, allowedKeys, requiredKeys = undefined) => {
+const dataRecord = (value, allowedKeys = undefined, requiredKeys = undefined) => {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const keys = Reflect.ownKeys(descriptors);
-    if (keys.some((key) => typeof key !== 'string' || !allowedKeys.includes(key) ||
+    if (keys.some((key) => typeof key !== 'string' ||
+        (allowedKeys && !allowedKeys.includes(key)) ||
         !descriptors[key].enumerable || !own(descriptors[key], 'value'))) return null;
     if (requiredKeys && (keys.length !== requiredKeys.length ||
         requiredKeys.some((key) => !keys.includes(key)))) return null;
@@ -51,7 +52,10 @@ const bindingFromPreference = (sessionPreference, globalLanguage) => Object.free
   sessionSource: source(sessionPreference.source),
 });
 
-export function preferenceBinding({ sessionPreference, globalLanguage } = {}) {
+export function preferenceBinding(input = {}) {
+  const request = dataRecord(input);
+  if (!request) return bindingFromPreference(Object.freeze({}), null);
+  const { sessionPreference, globalLanguage } = request;
   const preference = subtitlePreferenceSnapshot(sessionPreference);
   return bindingFromPreference(preference || Object.freeze({}), globalLanguage);
 }
@@ -61,9 +65,12 @@ const sameBinding = (candidate, expected) => {
   return snapshot && bindingKeys.every((key) => snapshot[key] === expected[key]);
 };
 
-export function verifySubtitlePreferenceProvenance({
-  sessionPreference, globalLanguage, preferenceProvenance, activeInstallationDigest,
-} = {}) {
+export function verifySubtitlePreferenceProvenance(input = {}) {
+  const request = dataRecord(input);
+  if (!request) return false;
+  const {
+    sessionPreference, globalLanguage, preferenceProvenance, activeInstallationDigest,
+  } = request;
   const preference = subtitlePreferenceSnapshot(sessionPreference);
   if (!preference) return false;
   const expected = bindingFromPreference(preference, globalLanguage);
@@ -88,9 +95,12 @@ export function verifySubtitlePreferenceProvenance({
   return true;
 }
 
-export function needsSubtitlePreferenceChoice({
-  sessionPreference, globalLanguage, preferenceProvenance, activeInstallationDigest,
-} = {}) {
+export function needsSubtitlePreferenceChoice(input = {}) {
+  const request = dataRecord(input);
+  if (!request) return true;
+  const {
+    sessionPreference, globalLanguage, preferenceProvenance, activeInstallationDigest,
+  } = request;
   const preference = subtitlePreferenceSnapshot(sessionPreference);
   if (!preference) return globalLanguage != null;
   // Explicit Off is authoritative. An enabled flag without proven origin
@@ -103,5 +113,4 @@ export function needsSubtitlePreferenceChoice({
     sessionPreference: preference, globalLanguage, preferenceProvenance, activeInstallationDigest,
   });
 }
-
 

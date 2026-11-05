@@ -7,16 +7,18 @@ import {
 const digest = /^[0-9a-f]{64}$/;
 const surfaces = new Set(['first-run', 'subtitle-settings']);
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
-const dataRecord = (value, keys) => {
+const dataRecord = (value, keys = undefined) => {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const actual = Reflect.ownKeys(descriptors);
-    if (actual.length !== keys.length || keys.some((key) => !actual.includes(key)) ||
-        actual.some((key) => typeof key !== 'string' || !descriptors[key].enumerable ||
-          !own(descriptors[key], 'value'))) return null;
+    if (actual.some((key) => typeof key !== 'string' ||
+        (keys && !keys.includes(key)) || !descriptors[key].enumerable ||
+        !own(descriptors[key], 'value'))) return null;
+    if (keys && (actual.length !== keys.length ||
+        keys.some((key) => !actual.includes(key)))) return null;
     return Object.freeze(Object.fromEntries(actual.map((key) => [key, descriptors[key].value])));
   } catch {
     return null;
@@ -37,10 +39,13 @@ const freezeReceipt = (receipt) => Object.freeze({
 // The caller must invoke this only from the real local control event. This
 // function validates and binds that event; it does not infer a choice from
 // hydrated account state, a language or an enabled flag.
-export function issueExplicitLocalChoiceReceipt({
-  activeInstallationDigest, preferenceRevision, sessionPreference,
-  globalLanguage, localChoiceEvent,
-} = {}) {
+export function issueExplicitLocalChoiceReceipt(input = {}) {
+  const request = dataRecord(input);
+  if (!request) return null;
+  const {
+    activeInstallationDigest, preferenceRevision, sessionPreference,
+    globalLanguage, localChoiceEvent,
+  } = request;
   const preference = subtitlePreferenceSnapshot(sessionPreference);
   const choiceEvent = dataRecord(localChoiceEvent, [
     'installationDigest', 'preferenceRevision', 'surface', 'choice',
@@ -65,10 +70,13 @@ export function issueExplicitLocalChoiceReceipt({
 
 // Promotion proves only that the exact accepted receipt was read back from
 // installation-local storage. It does not prove UI or device acceptance.
-export function promoteStoredPreferenceReceipt({
-  activeInstallationDigest, sessionPreference, globalLanguage,
-  storedReceipt, storageReadback,
-} = {}) {
+export function promoteStoredPreferenceReceipt(input = {}) {
+  const request = dataRecord(input);
+  if (!request) return null;
+  const {
+    activeInstallationDigest, sessionPreference, globalLanguage,
+    storedReceipt, storageReadback,
+  } = request;
   const preference = subtitlePreferenceSnapshot(sessionPreference);
   let storedOwnKeys = [];
   try {
