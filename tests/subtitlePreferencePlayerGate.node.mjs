@@ -124,6 +124,36 @@ test('hostile top-level provenance and receipt requests fail closed without gett
     assert.equal(reads, 0);
 });
 
+test('hostile top-level player requests fail closed without getter execution', () => {
+    const storage = new MemoryStorage();
+    let reads = 0;
+    const accessorRequest = { storage };
+    Object.defineProperty(accessorRequest, 'options', {
+        enumerable: true,
+        get() { reads += 1; return smart; },
+    });
+    assert.deepEqual(readPlayerSubtitleAutomation(accessorRequest), {
+        subtitle: false,
+        audio: false,
+        reason: 'installation_preference_unverified',
+        provenance: null,
+    });
+    assert.equal(reads, 0);
+
+    const revoked = Proxy.revocable({ storage, options: smart }, {});
+    revoked.revoke();
+    assert.doesNotThrow(() => {
+        assert.equal(readPlayerSubtitleAutomation(revoked.proxy).subtitle, false);
+    });
+
+    const hidden = { storage, options: smart };
+    Object.defineProperty(hidden, 'accountHydration', { value: true });
+    assert.equal(readPlayerSubtitleAutomation(hidden).subtitle, false);
+    const symbol = { storage, options: smart };
+    symbol[Symbol('authority')] = true;
+    assert.equal(readPlayerSubtitleAutomation(symbol).subtitle, false);
+});
+
 const record = (storage, options = smart) => {
     storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
     return recordExplicitLocalChoice({

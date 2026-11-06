@@ -24,6 +24,27 @@ const POLICY_FIELDS = Object.freeze([
     'allowForcedOnly',
     'forcedTranslationsForUnderstoodAudio',
 ]);
+const REQUEST_FIELDS = Object.freeze(['storage', 'options']);
+
+const snapshotRequest = (candidate) => {
+    try {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+        const prototype = Object.getPrototypeOf(candidate);
+        if (prototype !== Object.prototype && prototype !== null) return null;
+        const descriptors = Object.getOwnPropertyDescriptors(candidate);
+        const keys = Reflect.ownKeys(descriptors);
+        if (keys.length !== REQUEST_FIELDS.length ||
+                REQUEST_FIELDS.some((field) => !keys.includes(field)) ||
+                keys.some((key) => typeof key !== 'string' || !REQUEST_FIELDS.includes(key) ||
+                    descriptors[key].enumerable !== true ||
+                    !Object.prototype.hasOwnProperty.call(descriptors[key], 'value'))) return null;
+        return Object.freeze(Object.fromEntries(
+            REQUEST_FIELDS.map((field) => [field, descriptors[field].value]),
+        ));
+    } catch {
+        return null;
+    }
+};
 
 const sameList = (left, right) => Array.isArray(left) && Array.isArray(right) &&
     left.length === right.length && left.every((value, index) => value === right[index]);
@@ -143,7 +164,12 @@ const result = (subtitle, audio, reason, provenance = null) => Object.freeze({
     provenance,
 });
 
-export function readPlayerSubtitleAutomation({ storage, options } = {}) {
+export function readPlayerSubtitleAutomation(input = {}) {
+    const request = snapshotRequest(input);
+    if (!request) {
+        return result(false, false, 'installation_preference_unverified');
+    }
+    const { storage, options } = request;
     const candidate = snapshotExactPolicy(options);
     if (!candidate) {
         return result(false, false, 'installation_preference_unverified');
