@@ -9,6 +9,34 @@ const entropy=(n)=>new Uint8Array(n).fill(0xab);
 test('hydration without a real UI event is inert',()=>{const s=storage();assert.equal(commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:base(),nextOptions:base()}).ok,false);assert.deepEqual(s.snapshot(),{});});
 test('exact mode control event commits policy and proven local evidence',()=>{const s=storage();const before=base(),after={...base(),mode:'on'};const r=commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:before,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'on'}});assert.equal(r.ok,true);assert.equal(r.provenance.kind,'same-installation-setting');assert.ok(s.getItem(PREFERENCE_RECEIPT_KEY));});
 test('event mismatch and injected changes fail without writes',()=>{for(const after of [{...base(),mode:'on',allowForcedOnly:true},{...base(),mode:'on'}]){const s=storage();const event={surface:'subtitle-settings',control:'automatic-mode',value:after.mode==='on'?'smart':'on'};assert.equal(commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:base(),nextOptions:after,localChoiceEvent:event}).ok,false);assert.deepEqual(s.snapshot(),{});}});
+test('hostile option and event records fail closed without accessor execution or writes',()=>{
+    const cases=[];
+    let reads=0;
+    const topLevelAccessor=base();
+    Object.defineProperty(topLevelAccessor,'mode',{enumerable:true,get(){reads+=1;return 'smart';}});
+    cases.push({currentOptions:topLevelAccessor,nextOptions:base(),localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'smart'}});
+    const nestedAccessor=['en'];
+    Object.defineProperty(nestedAccessor,'0',{enumerable:true,get(){reads+=1;return 'en';}});
+    cases.push({currentOptions:{...base(),understoodLanguages:nestedAccessor},nextOptions:base(),localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'smart'}});
+    const eventAccessor={control:'automatic-mode',value:'smart'};
+    Object.defineProperty(eventAccessor,'surface',{enumerable:true,get(){reads+=1;return 'subtitle-settings';}});
+    cases.push({currentOptions:base(),nextOptions:base(),localChoiceEvent:eventAccessor});
+    const hidden={...base()};
+    Object.defineProperty(hidden,'accountHydration',{value:true});
+    cases.push({currentOptions:hidden,nextOptions:base(),localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'smart'}});
+    const symbol={...base()};
+    symbol[Symbol('authority')]=true;
+    cases.push({currentOptions:symbol,nextOptions:base(),localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'smart'}});
+    const revoked=Proxy.revocable(base(),{});
+    revoked.revoke();
+    cases.push({currentOptions:revoked.proxy,nextOptions:base(),localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'smart'}});
+    for(const candidate of cases){
+        const s=storage();
+        assert.doesNotThrow(()=>assert.equal(commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,...candidate}).ok,false));
+        assert.deepEqual(s.snapshot(),{});
+    }
+    assert.equal(reads,0);
+});
 test('explicit off revokes receipt and persists off',()=>{const s=storage();let before=base(),after={...base(),mode:'on'};assert.equal(commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:before,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'on'}}).ok,true);before=after;after={...after,mode:'off'};const r=commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:before,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'off'}});assert.equal(r.ok,true);assert.equal(s.getItem(PREFERENCE_RECEIPT_KEY),null);});
 test('unknown immediate policy readback drift is never overwritten by rollback',()=>{const originalRaw=JSON.stringify(base());const s=storage({'stremio.enhanced.subtitlePolicy.v1':originalRaw});const original=s.setItem;let driftedRaw;s.setItem=(k,v)=>{const stored=k==='stremio.enhanced.subtitlePolicy.v1'?`${v} `:v;if(k==='stremio.enhanced.subtitlePolicy.v1')driftedRaw=stored;original.call(s,k,stored);};const r=commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:base(),nextOptions:{...base(),mode:'on'},localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'on'}});assert.equal(r.ok,false);assert.equal(r.rollbackVerified,false);assert.equal(s.getItem('stremio.enhanced.subtitlePolicy.v1'),driftedRaw);assert.notEqual(driftedRaw,`${originalRaw} `);});
 test('language event rebinds evidence and increments revision',()=>{const s=storage();let before=base(),after={...base(),mode:'on'};commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:before,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'on'}});before=after;after={...after,subtitleLanguages:['fr']};const r=commitSubtitleSettingsChoice({storage:s,randomBytes:()=>{throw Error('reuse');},currentOptions:before,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:'subtitle-primary',value:'fr'}});assert.equal(r.ok,true);assert.equal(r.provenance.preferenceRevision,2);assert.equal(r.provenance.binding.sessionLanguage,'fr');});

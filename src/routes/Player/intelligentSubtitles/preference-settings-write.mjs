@@ -26,8 +26,53 @@ const CONTROLS = Object.freeze({
     'forced-only': 'allowForcedOnly',
     'forced-translations': 'forcedTranslationsForUnderstoodAudio',
 });
-const exactKeys = (value, keys) => value && typeof value === 'object' &&
-    !Array.isArray(value) && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
+const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+const dataRecord = (value, keys) => {
+    try {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        const prototype = Object.getPrototypeOf(value);
+        if (prototype !== Object.prototype && prototype !== null) return null;
+        const descriptors = Object.getOwnPropertyDescriptors(value);
+        const actual = Reflect.ownKeys(descriptors);
+        if (actual.length !== keys.length || keys.some((key) => !actual.includes(key)) ||
+                actual.some((key) => typeof key !== 'string' || !keys.includes(key) ||
+                    !descriptors[key].enumerable || !own(descriptors[key], 'value'))) return null;
+        return Object.freeze(Object.fromEntries(keys.map((key) => [key, descriptors[key].value])));
+    } catch {
+        return null;
+    }
+};
+const dataLanguageList = (value) => {
+    try {
+        if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+        const descriptors = Object.getOwnPropertyDescriptors(value);
+        const keys = Reflect.ownKeys(descriptors);
+        const length = descriptors.length;
+        if (!length || !own(length, 'value') || !Number.isSafeInteger(length.value) ||
+                length.value < 1 || length.value > 4 || keys.length !== length.value + 1 ||
+                keys.some((key) => typeof key !== 'string' ||
+                    (key !== 'length' && !/^(0|[1-9][0-9]*)$/.test(key)))) return null;
+        const result = [];
+        for (let index = 0; index < length.value; index += 1) {
+            const descriptor = descriptors[String(index)];
+            if (!descriptor || !descriptor.enumerable || !own(descriptor, 'value') ||
+                    typeof descriptor.value !== 'string' ||
+                    !/^[a-z]{2,3}$/.test(descriptor.value)) return null;
+            result.push(descriptor.value);
+        }
+        return Object.freeze(result);
+    } catch {
+        return null;
+    }
+};
+const snapshotOptions = (value) => {
+    const record = dataRecord(value, POLICY_KEYS);
+    if (!record) return null;
+    const understoodLanguages = dataLanguageList(record.understoodLanguages);
+    const subtitleLanguages = dataLanguageList(record.subtitleLanguages);
+    if (!understoodLanguages || !subtitleLanguages) return null;
+    return Object.freeze({ ...record, understoodLanguages, subtitleLanguages });
+};
 const hasStorage = (storage) => storage &&
     typeof storage.getItem === 'function' &&
     typeof storage.setItem === 'function' &&
@@ -58,12 +103,7 @@ const optionValue = (options, control) => {
     }
 };
 const validOptions = (value) => {
-    if (!exactKeys(value, POLICY_KEYS) || !MODES.has(value.mode)) return false;
-    if (!Array.isArray(value.understoodLanguages) || !Array.isArray(value.subtitleLanguages) ||
-            value.understoodLanguages.length < 1 || value.understoodLanguages.length > 4 ||
-            value.subtitleLanguages.length < 1 || value.subtitleLanguages.length > 4) return false;
-    if (![...value.understoodLanguages, ...value.subtitleLanguages].every(
-        (item) => typeof item === 'string' && /^[a-z]{2,3}$/.test(item))) return false;
+    if (!value || !MODES.has(value.mode)) return false;
     return typeof value.preferUnderstoodAudio === 'boolean' &&
         ['off', 'subtitles'].includes(value.unknownAudio) &&
         ['hold', 'ignore'].includes(value.suspectedPictureSubtitles) &&
@@ -114,12 +154,14 @@ const rejected = (rollbackVerified = true) => Object.freeze({
 export function commitSubtitleSettingsChoice({
     storage, randomBytes, currentOptions, nextOptions, localChoiceEvent,
 } = {}) {
-    if (!hasStorage(storage) || !validOptions(currentOptions) || !validOptions(nextOptions) ||
-            !exactKeys(localChoiceEvent, EVENT_KEYS) ||
-            localChoiceEvent.surface !== 'subtitle-settings' ||
-            !Object.hasOwn(CONTROLS, localChoiceEvent.control) ||
-            !onlyControlChanged(currentOptions, nextOptions, localChoiceEvent.control) ||
-            !same(optionValue(nextOptions, localChoiceEvent.control), localChoiceEvent.value)) {
+    const current = snapshotOptions(currentOptions);
+    const next = snapshotOptions(nextOptions);
+    const event = dataRecord(localChoiceEvent, EVENT_KEYS);
+    if (!hasStorage(storage) || !validOptions(current) || !validOptions(next) || !event ||
+            event.surface !== 'subtitle-settings' ||
+            !Object.hasOwn(CONTROLS, event.control) ||
+            !onlyControlChanged(current, next, event.control) ||
+            !same(optionValue(next, event.control), event.value)) {
         return rejected();
     }
 
@@ -127,10 +169,10 @@ export function commitSubtitleSettingsChoice({
     const snapshots = keys.map((key) => [key, safeGet(storage, key)]);
     if (snapshots.some(([, raw]) => raw === undefined)) return rejected();
     const storedOptions = parseStoredOptions(snapshots[0][1]);
-    if (!storedOptions || !same(storedOptions, currentOptions) ||
+    if (!storedOptions || !same(storedOptions, current) ||
             !snapshots.every(([key, raw]) => safeGet(storage, key) === raw)) return rejected();
-    const normalized = policy.normalise(nextOptions);
-    if (!same(normalized, nextOptions)) return rejected();
+    const normalized = policy.normalise(next);
+    if (!same(normalized, next)) return rejected();
     const policyRaw = JSON.stringify(normalized);
     const policyWrite = [[policy.STORAGE_KEY, policyRaw]];
     const fail = (writes = policyWrite) => rejected(restore(storage, snapshots, writes));
@@ -148,7 +190,7 @@ export function commitSubtitleSettingsChoice({
         return fail();
     }
 
-    if (nextOptions.mode === 'off' || nextOptions.mode === 'stremio') {
+    if (next.mode === 'off' || next.mode === 'stremio') {
         const transactionWrites = [
             [policy.STORAGE_KEY, policyRaw],
             [PREFERENCE_RECEIPT_KEY, null],
@@ -169,7 +211,7 @@ export function commitSubtitleSettingsChoice({
         return Object.freeze({ ok: true, provenance: null, rollbackVerified: true });
     }
 
-    const language = nextOptions.subtitleLanguages[0];
+    const language = next.subtitleLanguages[0];
     const provenance = recordExplicitLocalChoice({
         storage,
         randomBytes,
