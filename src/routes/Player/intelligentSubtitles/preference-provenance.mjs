@@ -114,6 +114,10 @@ export function verifySubtitlePreferenceProvenance(input = {}) {
   const preference = subtitlePreferenceSnapshot(sessionPreference);
   if (!preference) return false;
   const expected = bindingFromPreference(preference, globalLanguage);
+  // A language-only or partially hydrated preference is not proof that the
+  // user enabled automatic subtitles, even when an otherwise valid local
+  // receipt binds that incomplete state.
+  if (expected.sessionEnabled !== true) return false;
   const evidence = dataRecord(preferenceProvenance, evidenceKeys);
   if (!evidence) return false;
   if (evidence.schemaVersion !== 1 || !kinds.has(evidence.kind)) return false;
@@ -128,7 +132,6 @@ export function verifySubtitlePreferenceProvenance(input = {}) {
   if (!sameBinding(evidence.binding, expected)) return false;
   if (evidence.kind === 'explicit-local-choice') {
     if (!surfaces.has(evidence.surface) || evidence.choice !== 'enabled') return false;
-    if (expected.sessionEnabled !== true) return false;
   } else if (own(evidence, 'surface') || own(evidence, 'choice')) {
     return false;
   }

@@ -236,6 +236,34 @@ test('undeclared top-level account or migration authority fails closed', () => {
     }), null);
 });
 
+test('same-installation receipts cannot promote missing or null enabled state into authority', () => {
+    const activeInstallationDigest = 'a'.repeat(64);
+    const globalLanguage = 'eng';
+
+    for (const sessionPreference of [{ language: 'eng' }, { enabled: null, language: 'eng' }]) {
+        const preferenceProvenance = {
+            schemaVersion: 1,
+            kind: 'same-installation-setting',
+            installationDigest: activeInstallationDigest,
+            preferenceRevision: 1,
+            binding: preferenceBinding({ sessionPreference, globalLanguage }),
+        };
+
+        assert.equal(verifySubtitlePreferenceProvenance({
+            activeInstallationDigest,
+            sessionPreference,
+            globalLanguage,
+            preferenceProvenance,
+        }), false);
+        assert.equal(needsSubtitlePreferenceChoice({
+            activeInstallationDigest,
+            sessionPreference,
+            globalLanguage,
+            preferenceProvenance,
+        }), true);
+    }
+});
+
 test('hostile top-level player requests fail closed without getter execution', () => {
     const storage = new MemoryStorage();
     let reads = 0;
