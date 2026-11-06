@@ -12,6 +12,9 @@ const POLICY_KEYS = [
     'allowForcedOnly', 'forcedTranslationsForUnderstoodAudio',
 ];
 const EVENT_KEYS = ['surface', 'control', 'value'];
+const REQUEST_KEYS = [
+    'storage', 'randomBytes', 'currentOptions', 'nextOptions', 'localChoiceEvent',
+];
 const MODES = new Set(['smart', 'off', 'on', 'stremio']);
 const CONTROLS = Object.freeze({
     'automatic-mode': 'mode',
@@ -151,9 +154,12 @@ const rejected = (rollbackVerified = true) => Object.freeze({
     rollbackVerified,
 });
 
-export function commitSubtitleSettingsChoice({
-    storage, randomBytes, currentOptions, nextOptions, localChoiceEvent,
-} = {}) {
+export function commitSubtitleSettingsChoice(input = {}) {
+    const request = dataRecord(input, REQUEST_KEYS);
+    if (!request) return rejected();
+    const {
+        storage, randomBytes, currentOptions, nextOptions, localChoiceEvent,
+    } = request;
     const current = snapshotOptions(currentOptions);
     const next = snapshotOptions(nextOptions);
     const event = dataRecord(localChoiceEvent, EVENT_KEYS);

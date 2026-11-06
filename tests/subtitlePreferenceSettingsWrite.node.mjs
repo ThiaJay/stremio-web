@@ -7,6 +7,21 @@ const base=()=>({mode:'smart',understoodLanguages:['en'],subtitleLanguages:['en'
 const storage=(seed={})=>{const m=new Map(Object.entries(seed));return {getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k),snapshot:()=>Object.fromEntries(m)};};
 const entropy=(n)=>new Uint8Array(n).fill(0xab);
 test('hydration without a real UI event is inert',()=>{const s=storage();assert.equal(commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:base(),nextOptions:base()}).ok,false);assert.deepEqual(s.snapshot(),{});});
+test('top-level settings request fails closed without invoking accessors or get traps',()=>{
+    let accessorReads=0;
+    const accessorRequest={randomBytes:entropy,currentOptions:base(),nextOptions:base(),localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'smart'}};
+    Object.defineProperty(accessorRequest,'storage',{enumerable:true,get(){accessorReads+=1;return storage();}});
+    assert.doesNotThrow(()=>assert.equal(commitSubtitleSettingsChoice(accessorRequest).ok,false));
+    assert.equal(accessorReads,0);
+
+    let getTraps=0;
+    const getProxy=new Proxy({storage:null,randomBytes:entropy,currentOptions:base(),nextOptions:base(),localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'smart'}},{get(){getTraps+=1;throw Error('top-level get trap must not run');}});
+    assert.doesNotThrow(()=>assert.equal(commitSubtitleSettingsChoice(getProxy).ok,false));
+    assert.equal(getTraps,0);
+
+    const ownKeysProxy=new Proxy({},{ownKeys(){throw Error('hostile top-level reflection');}});
+    assert.doesNotThrow(()=>assert.equal(commitSubtitleSettingsChoice(ownKeysProxy).ok,false));
+});
 test('exact mode control event commits policy and proven local evidence',()=>{const s=storage();const before=base(),after={...base(),mode:'on'};const r=commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:before,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'on'}});assert.equal(r.ok,true);assert.equal(r.provenance.kind,'same-installation-setting');assert.ok(s.getItem(PREFERENCE_RECEIPT_KEY));});
 test('event mismatch and injected changes fail without writes',()=>{for(const after of [{...base(),mode:'on',allowForcedOnly:true},{...base(),mode:'on'}]){const s=storage();const event={surface:'subtitle-settings',control:'automatic-mode',value:after.mode==='on'?'smart':'on'};assert.equal(commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:base(),nextOptions:after,localChoiceEvent:event}).ok,false);assert.deepEqual(s.snapshot(),{});}});
 test('hostile option and event records fail closed without accessor execution or writes',()=>{

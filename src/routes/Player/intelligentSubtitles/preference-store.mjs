@@ -18,6 +18,24 @@ const RECEIPT_KEYS = [
     'schemaVersion', 'kind', 'installationDigest', 'preferenceRevision',
     'surface', 'choice', 'binding',
 ];
+const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+const snapshotRequest = (value, allowedKeys, requiredKeys) => {
+    try {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        const prototype = Object.getPrototypeOf(value);
+        if (prototype !== Object.prototype && prototype !== null) return null;
+        const descriptors = Object.getOwnPropertyDescriptors(value);
+        const keys = Reflect.ownKeys(descriptors);
+        if (keys.some((key) => typeof key !== 'string' || !allowedKeys.includes(key) ||
+                !descriptors[key].enumerable || !own(descriptors[key], 'value')) ||
+                requiredKeys.some((key) => !keys.includes(key))) return null;
+        return Object.freeze(Object.fromEntries(
+            keys.map((key) => [key, descriptors[key].value]),
+        ));
+    } catch {
+        return null;
+    }
+};
 const exactKeys = (value, keys) => value && typeof value === 'object' &&
     !Array.isArray(value) && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
 const hasStorage = (storage) => storage &&
@@ -85,7 +103,10 @@ const parseEnvelope = (raw, installationDigest) => {
     return Object.freeze({ envelope, receipt });
 };
 
-export function ensureInstallationDigest({ storage, randomBytes } = {}) {
+export function ensureInstallationDigest(input = {}) {
+    const request = snapshotRequest(input, ['storage', 'randomBytes'], ['storage']);
+    if (!request) return null;
+    const { storage, randomBytes } = request;
     if (!hasStorage(storage)) return null;
     const before = safeGet(storage, INSTALLATION_DIGEST_KEY);
     if (before === undefined) return null;
@@ -111,7 +132,14 @@ export function ensureInstallationDigest({ storage, randomBytes } = {}) {
     return generated;
 }
 
-export function loadStoredPreference({ storage, sessionPreference, globalLanguage } = {}) {
+export function loadStoredPreference(input = {}) {
+    const request = snapshotRequest(
+        input,
+        ['storage', 'sessionPreference', 'globalLanguage'],
+        ['storage', 'sessionPreference'],
+    );
+    if (!request) return null;
+    const { storage, sessionPreference, globalLanguage } = request;
     if (!hasStorage(storage)) return null;
     const installationDigest = safeGet(storage, INSTALLATION_DIGEST_KEY);
     if (!DIGEST.test(installationDigest || '')) return null;
@@ -134,9 +162,14 @@ export function loadStoredPreference({ storage, sessionPreference, globalLanguag
     });
 }
 
-export function recordExplicitLocalChoice({
-    storage, randomBytes, sessionPreference, globalLanguage, surface,
-} = {}) {
+export function recordExplicitLocalChoice(input = {}) {
+    const request = snapshotRequest(
+        input,
+        ['storage', 'randomBytes', 'sessionPreference', 'globalLanguage', 'surface'],
+        ['storage', 'sessionPreference', 'surface'],
+    );
+    if (!request) return null;
+    const { storage, randomBytes, sessionPreference, globalLanguage, surface } = request;
     const preference = subtitlePreferenceSnapshot(sessionPreference);
     if (!hasStorage(storage) || !SURFACES.has(surface) || !preference ||
             preference.enabled !== true) return null;

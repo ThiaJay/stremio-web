@@ -37,6 +37,38 @@ test('module import performs no storage or identity action', async () => {
   delete globalThis.localStorage;
 });
 
+test('top-level store requests fail closed without invoking accessors or get traps', async () => {
+  const {
+    ensureInstallationDigest, loadStoredPreference, recordExplicitLocalChoice,
+  } = await fresh();
+  for (const invoke of [
+    (request) => ensureInstallationDigest(request),
+    (request) => loadStoredPreference(request),
+    (request) => recordExplicitLocalChoice(request),
+  ]) {
+    let accessorReads = 0;
+    const accessorRequest = {};
+    Object.defineProperty(accessorRequest, 'storage', {
+      enumerable: true,
+      get() { accessorReads += 1; return memoryStorage(); },
+    });
+    assert.doesNotThrow(() => assert.equal(invoke(accessorRequest), null));
+    assert.equal(accessorReads, 0);
+
+    let getTraps = 0;
+    const getProxy = new Proxy({ storage: null }, {
+      get() { getTraps += 1; throw new Error('top-level get trap must not run'); },
+    });
+    assert.doesNotThrow(() => assert.equal(invoke(getProxy), null));
+    assert.equal(getTraps, 0);
+
+    const ownKeysProxy = new Proxy({}, {
+      ownKeys() { throw new Error('hostile top-level reflection'); },
+    });
+    assert.doesNotThrow(() => assert.equal(invoke(ownKeysProxy), null));
+  }
+});
+
 test('hydrated enabled state cannot create consent without a trusted UI surface', async () => {
   const { recordExplicitLocalChoice } = await fresh();
   const storage = memoryStorage();
