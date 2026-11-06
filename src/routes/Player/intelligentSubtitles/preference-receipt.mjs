@@ -1,29 +1,12 @@
 import {
   preferenceBinding,
+  snapshotPreferenceDataRecord as dataRecord,
   subtitlePreferenceSnapshot,
   verifySubtitlePreferenceProvenance,
 } from './preference-provenance.mjs';
 
 const digest = /^[0-9a-f]{64}$/;
 const surfaces = new Set(['first-run', 'subtitle-settings']);
-const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
-const dataRecord = (value, keys = undefined) => {
-  try {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    const actual = Reflect.ownKeys(descriptors);
-    if (actual.some((key) => typeof key !== 'string' ||
-        (keys && !keys.includes(key)) || !descriptors[key].enumerable ||
-        !own(descriptors[key], 'value'))) return null;
-    if (keys && (actual.length !== keys.length ||
-        keys.some((key) => !actual.includes(key)))) return null;
-    return Object.freeze(Object.fromEntries(actual.map((key) => [key, descriptors[key].value])));
-  } catch {
-    return null;
-  }
-};
 const revision = (value) => Number.isSafeInteger(value) && value > 0;
 const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'sessionSource'];
 const issueRequestKeys = [

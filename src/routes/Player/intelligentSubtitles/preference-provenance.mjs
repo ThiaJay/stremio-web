@@ -14,12 +14,48 @@ const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'ses
 const provenanceRequestKeys = [
   'sessionPreference', 'globalLanguage', 'preferenceProvenance', 'activeInstallationDigest',
 ];
-const dataRecord = (value, allowedKeys = undefined, requiredKeys = undefined) => {
+
+const closedPlainDataClone = (value) => {
+  try {
+    if (typeof globalThis.structuredClone !== 'function') return null;
+    const visited = new Set();
+    const inspect = (candidate) => {
+      if (candidate == null || ['string', 'number', 'boolean', 'undefined'].includes(typeof candidate)) {
+        return true;
+      }
+      if (typeof candidate !== 'object' || Array.isArray(candidate)) return false;
+      if (visited.has(candidate)) return true;
+      visited.add(candidate);
+      const prototype = Object.getPrototypeOf(candidate);
+      if (prototype !== Object.prototype && prototype !== null) return false;
+      const descriptors = Object.getOwnPropertyDescriptors(candidate);
+      const keys = Reflect.ownKeys(descriptors);
+      return keys.every((key) => typeof key === 'string' &&
+        descriptors[key].enumerable && own(descriptors[key], 'value') &&
+        inspect(descriptors[key].value));
+    };
+    if (!inspect(value)) return null;
+    // Structured clone rejects Proxy values even when their reflection traps
+    // impersonate a plain record. The descriptor walk above rejects accessors
+    // throughout the graph before cloning can evaluate them.
+    return globalThis.structuredClone(value);
+  } catch {
+    return null;
+  }
+};
+
+export const snapshotPreferenceDataRecord = (
+  value,
+  allowedKeys = undefined,
+  requiredKeys = undefined,
+) => {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const prototype = Object.getPrototypeOf(value);
+    const detached = closedPlainDataClone(value);
+    if (!detached) return null;
+    const prototype = Object.getPrototypeOf(detached);
     if (prototype !== Object.prototype && prototype !== null) return null;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const descriptors = Object.getOwnPropertyDescriptors(detached);
     const keys = Reflect.ownKeys(descriptors);
     if (keys.some((key) => typeof key !== 'string' ||
         (allowedKeys && !allowedKeys.includes(key)) ||
@@ -31,6 +67,7 @@ const dataRecord = (value, allowedKeys = undefined, requiredKeys = undefined) =>
     return null;
   }
 };
+const dataRecord = snapshotPreferenceDataRecord;
 const text = (value) => typeof value === 'string' && value.trim()
   ? value.trim().toLowerCase().replaceAll('_', '-') : null;
 const source = (value) => ['embedded', 'external'].includes(value) ? value : null;

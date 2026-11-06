@@ -124,6 +124,62 @@ test('hostile top-level provenance and receipt requests fail closed without gett
     assert.equal(reads, 0);
 });
 
+test('forwarding Proxy requests cannot impersonate closed provenance or receipt data', () => {
+    const digest = 'a'.repeat(64);
+    const sessionPreference = { enabled: true, language: 'eng' };
+    const binding = {
+        sessionEnabled: true,
+        sessionLanguage: 'eng',
+        globalLanguage: null,
+        sessionSource: null,
+    };
+    const forwardingProxy = (target) => {
+        let calls = 0;
+        const counted = (operation) => (...args) => {
+            calls += 1;
+            return Reflect[operation](...args);
+        };
+        return {
+            proxy: new Proxy(target, {
+                getPrototypeOf: counted('getPrototypeOf'),
+                ownKeys: counted('ownKeys'),
+                getOwnPropertyDescriptor: counted('getOwnPropertyDescriptor'),
+            }),
+            calls: () => calls,
+        };
+    };
+
+    const provenance = forwardingProxy({
+        sessionPreference,
+        globalLanguage: null,
+        preferenceProvenance: {
+            schemaVersion: 1,
+            kind: 'same-installation-setting',
+            installationDigest: digest,
+            preferenceRevision: 1,
+            binding,
+        },
+        activeInstallationDigest: digest,
+    });
+    assert.equal(verifySubtitlePreferenceProvenance(provenance.proxy), false);
+    assert.ok(provenance.calls() > 0);
+
+    const receipt = forwardingProxy({
+        activeInstallationDigest: digest,
+        preferenceRevision: 1,
+        sessionPreference,
+        globalLanguage: null,
+        localChoiceEvent: {
+            installationDigest: digest,
+            preferenceRevision: 1,
+            surface: 'subtitle-settings',
+            choice: 'enabled',
+        },
+    });
+    assert.equal(issueExplicitLocalChoiceReceipt(receipt.proxy), null);
+    assert.ok(receipt.calls() > 0);
+});
+
 test('undeclared top-level account or migration authority fails closed', () => {
     const activeInstallationDigest = 'a'.repeat(64);
     const sessionPreference = { enabled: true, language: 'eng' };

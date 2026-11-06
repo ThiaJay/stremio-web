@@ -22,8 +22,8 @@ const enabled = Object.freeze({ enabled: true, language: 'eng', source: 'embedde
 
 test('Foundation runtime modules retain their exact reviewed Git blob identities', async () => {
   for (const [name, expected] of [
-    ['preference-provenance.mjs', '3454671a251aacc7e8e37a30f269522ea3a241ad'],
-    ['preference-receipt.mjs', '8f45e8b21280f68150b9a724f06fab82623ec4e2'],
+    ['preference-provenance.mjs', '1620bcf317cb51855c1caf77d3408f8ade0485bd'],
+    ['preference-receipt.mjs', '61f275a0dc806ee96834d008fe160a022502a807'],
   ]) {
     const content = await readFile(new URL("../src/routes/Player/intelligentSubtitles/" + name, import.meta.url));
     const actual = createHash('sha1').update(`blob ${content.byteLength}\0`).update(content).digest('hex');
