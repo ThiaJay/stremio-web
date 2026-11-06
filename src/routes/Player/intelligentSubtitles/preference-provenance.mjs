@@ -11,6 +11,9 @@ const evidenceKeys = [
   'surface', 'choice', 'binding',
 ];
 const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'sessionSource'];
+const provenanceRequestKeys = [
+  'sessionPreference', 'globalLanguage', 'preferenceProvenance', 'activeInstallationDigest',
+];
 const dataRecord = (value, allowedKeys = undefined, requiredKeys = undefined) => {
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -66,7 +69,7 @@ const sameBinding = (candidate, expected) => {
 };
 
 export function verifySubtitlePreferenceProvenance(input = {}) {
-  const request = dataRecord(input);
+  const request = dataRecord(input, provenanceRequestKeys);
   if (!request) return false;
   const {
     sessionPreference, globalLanguage, preferenceProvenance, activeInstallationDigest,
@@ -96,7 +99,7 @@ export function verifySubtitlePreferenceProvenance(input = {}) {
 }
 
 export function needsSubtitlePreferenceChoice(input = {}) {
-  const request = dataRecord(input);
+  const request = dataRecord(input, provenanceRequestKeys);
   if (!request) return true;
   const {
     sessionPreference, globalLanguage, preferenceProvenance, activeInstallationDigest,

@@ -124,6 +124,62 @@ test('hostile top-level provenance and receipt requests fail closed without gett
     assert.equal(reads, 0);
 });
 
+test('undeclared top-level account or migration authority fails closed', () => {
+    const activeInstallationDigest = 'a'.repeat(64);
+    const sessionPreference = { enabled: true, language: 'eng' };
+    const globalLanguage = 'eng';
+    const localChoiceEvent = {
+        installationDigest: activeInstallationDigest,
+        preferenceRevision: 1,
+        surface: 'first-run',
+        choice: 'enabled',
+    };
+    const receipt = issueExplicitLocalChoiceReceipt({
+        activeInstallationDigest,
+        preferenceRevision: 1,
+        sessionPreference,
+        globalLanguage,
+        localChoiceEvent,
+    });
+    const storageReadback = {
+        scope: 'installation-local',
+        installationDigest: activeInstallationDigest,
+        preferenceRevision: 1,
+        binding: receipt.binding,
+    };
+
+    assert.equal(verifySubtitlePreferenceProvenance({
+        activeInstallationDigest,
+        sessionPreference,
+        globalLanguage,
+        preferenceProvenance: receipt,
+        accountHydrated: true,
+    }), false);
+    assert.equal(needsSubtitlePreferenceChoice({
+        activeInstallationDigest,
+        sessionPreference,
+        globalLanguage,
+        preferenceProvenance: receipt,
+        accountHydrated: true,
+    }), true);
+    assert.equal(issueExplicitLocalChoiceReceipt({
+        activeInstallationDigest,
+        preferenceRevision: 1,
+        sessionPreference,
+        globalLanguage,
+        localChoiceEvent,
+        accountHydrated: true,
+    }), null);
+    assert.equal(promoteStoredPreferenceReceipt({
+        activeInstallationDigest,
+        sessionPreference,
+        globalLanguage,
+        storedReceipt: receipt,
+        storageReadback,
+        migratedFromOfficialApp: true,
+    }), null);
+});
+
 test('hostile top-level player requests fail closed without getter execution', () => {
     const storage = new MemoryStorage();
     let reads = 0;

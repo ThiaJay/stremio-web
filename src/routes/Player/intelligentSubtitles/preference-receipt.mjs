@@ -26,6 +26,14 @@ const dataRecord = (value, keys = undefined) => {
 };
 const revision = (value) => Number.isSafeInteger(value) && value > 0;
 const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'sessionSource'];
+const issueRequestKeys = [
+  'activeInstallationDigest', 'preferenceRevision', 'sessionPreference',
+  'globalLanguage', 'localChoiceEvent',
+];
+const promotionRequestKeys = [
+  'activeInstallationDigest', 'sessionPreference', 'globalLanguage',
+  'storedReceipt', 'storageReadback',
+];
 const sameBinding = (left, right) => {
   const leftRecord = dataRecord(left, bindingKeys);
   const rightRecord = dataRecord(right, bindingKeys);
@@ -40,7 +48,7 @@ const freezeReceipt = (receipt) => Object.freeze({
 // function validates and binds that event; it does not infer a choice from
 // hydrated account state, a language or an enabled flag.
 export function issueExplicitLocalChoiceReceipt(input = {}) {
-  const request = dataRecord(input);
+  const request = dataRecord(input, issueRequestKeys);
   if (!request) return null;
   const {
     activeInstallationDigest, preferenceRevision, sessionPreference,
@@ -71,7 +79,7 @@ export function issueExplicitLocalChoiceReceipt(input = {}) {
 // Promotion proves only that the exact accepted receipt was read back from
 // installation-local storage. It does not prove UI or device acceptance.
 export function promoteStoredPreferenceReceipt(input = {}) {
-  const request = dataRecord(input);
+  const request = dataRecord(input, promotionRequestKeys);
   if (!request) return null;
   const {
     activeInstallationDigest, sessionPreference, globalLanguage,
