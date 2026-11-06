@@ -1,0 +1,556 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+import policy from '../src/routes/Player/enhancedSubtitlePolicy.js';
+import {
+    INSTALLATION_DIGEST_KEY,
+    PREFERENCE_RECEIPT_KEY,
+    recordExplicitLocalChoice,
+} from '../src/routes/Player/intelligentSubtitles/preference-store.mjs';
+import {
+    PLAYER_PREFERENCE_EVENT,
+    PLAYER_STORAGE_KEYS,
+    readPlayerSubtitleAutomation,
+} from '../src/routes/Player/intelligentSubtitles/preference-player-gate.mjs';
+import {
+    needsSubtitlePreferenceChoice,
+    preferenceBinding,
+    verifySubtitlePreferenceProvenance,
+} from '../src/routes/Player/intelligentSubtitles/preference-provenance.mjs';
+import {
+    issueExplicitLocalChoiceReceipt,
+    promoteStoredPreferenceReceipt,
+} from '../src/routes/Player/intelligentSubtitles/preference-receipt.mjs';
+
+class MemoryStorage {
+    constructor(entries = []) {
+        this.values = new Map(entries);
+    }
+    getItem(key) {
+        return this.values.has(key) ? this.values.get(key) : null;
+    }
+    setItem(key, value) {
+        this.values.set(key, String(value));
+    }
+    removeItem(key) {
+        this.values.delete(key);
+    }
+}
+
+class DriftAfterPromotionStorage extends MemoryStorage {
+    constructor(entries, mutate, mutateAt = 8) {
+        super(entries);
+        this.reads = 0;
+        this.mutate = mutate;
+        this.mutateAt = mutateAt;
+    }
+    getItem(key) {
+        this.reads += 1;
+        if (this.reads === this.mutateAt) this.mutate(this);
+        return super.getItem(key);
+    }
+}
+
+const entropy = (length) => new Uint8Array(length).fill(0x2a);
+const smart = policy.normalise(null);
+
+test('hostile proxy preference records fail closed instead of escaping the provenance boundary', () => {
+    const digest = 'a'.repeat(64);
+    const sessionPreference = { enabled: true, language: 'eng' };
+    const globalLanguage = 'eng';
+    const throwingProxy = (label) => new Proxy({}, {
+        getPrototypeOf() { throw new Error(label); },
+    });
+    const receipt = {
+        schemaVersion: 1,
+        kind: 'same-installation-setting',
+        installationDigest: digest,
+        preferenceRevision: 1,
+        binding: preferenceBinding({ sessionPreference, globalLanguage }),
+    };
+
+    assert.equal(needsSubtitlePreferenceChoice({
+        sessionPreference: throwingProxy('preference'), globalLanguage,
+    }), true);
+    assert.equal(verifySubtitlePreferenceProvenance({
+        sessionPreference, globalLanguage, activeInstallationDigest: digest,
+        preferenceProvenance: throwingProxy('evidence'),
+    }), false);
+    assert.equal(issueExplicitLocalChoiceReceipt({
+        activeInstallationDigest: digest, preferenceRevision: 1,
+        sessionPreference, globalLanguage, localChoiceEvent: throwingProxy('event'),
+    }), null);
+    assert.equal(promoteStoredPreferenceReceipt({
+        activeInstallationDigest: digest, sessionPreference, globalLanguage,
+        storedReceipt: throwingProxy('receipt'), storageReadback: {},
+    }), null);
+    assert.equal(promoteStoredPreferenceReceipt({
+        activeInstallationDigest: digest, sessionPreference, globalLanguage,
+        storedReceipt: receipt, storageReadback: throwingProxy('readback'),
+    }), null);
+});
+
+test('hostile top-level provenance and receipt requests fail closed without getter execution', () => {
+    const revocable = Proxy.revocable({}, {});
+    revocable.revoke();
+    assert.deepEqual(preferenceBinding(revocable.proxy), {
+        sessionEnabled: null,
+        sessionLanguage: null,
+        globalLanguage: null,
+        sessionSource: null,
+    });
+    assert.equal(needsSubtitlePreferenceChoice(revocable.proxy), true);
+    assert.equal(verifySubtitlePreferenceProvenance(revocable.proxy), false);
+    assert.equal(issueExplicitLocalChoiceReceipt(revocable.proxy), null);
+    assert.equal(promoteStoredPreferenceReceipt(revocable.proxy), null);
+
+    let reads = 0;
+    const accessorRequest = {};
+    Object.defineProperty(accessorRequest, 'sessionPreference', {
+        enumerable: true,
+        get() { reads += 1; return { enabled: true, language: 'eng' }; },
+    });
+    assert.deepEqual(preferenceBinding(accessorRequest), {
+        sessionEnabled: null,
+        sessionLanguage: null,
+        globalLanguage: null,
+        sessionSource: null,
+    });
+    assert.equal(needsSubtitlePreferenceChoice(accessorRequest), true);
+    assert.equal(verifySubtitlePreferenceProvenance(accessorRequest), false);
+    assert.equal(issueExplicitLocalChoiceReceipt(accessorRequest), null);
+    assert.equal(promoteStoredPreferenceReceipt(accessorRequest), null);
+    assert.equal(reads, 0);
+});
+
+test('forwarding Proxy requests cannot impersonate closed provenance or receipt data', () => {
+    const digest = 'a'.repeat(64);
+    const sessionPreference = { enabled: true, language: 'eng' };
+    const binding = {
+        sessionEnabled: true,
+        sessionLanguage: 'eng',
+        globalLanguage: null,
+        sessionSource: null,
+    };
+    const forwardingProxy = (target) => {
+        let calls = 0;
+        const counted = (operation) => (...args) => {
+            calls += 1;
+            return Reflect[operation](...args);
+        };
+        return {
+            proxy: new Proxy(target, {
+                getPrototypeOf: counted('getPrototypeOf'),
+                ownKeys: counted('ownKeys'),
+                getOwnPropertyDescriptor: counted('getOwnPropertyDescriptor'),
+            }),
+            calls: () => calls,
+        };
+    };
+
+    const provenance = forwardingProxy({
+        sessionPreference,
+        globalLanguage: null,
+        preferenceProvenance: {
+            schemaVersion: 1,
+            kind: 'same-installation-setting',
+            installationDigest: digest,
+            preferenceRevision: 1,
+            binding,
+        },
+        activeInstallationDigest: digest,
+    });
+    assert.equal(verifySubtitlePreferenceProvenance(provenance.proxy), false);
+    assert.ok(provenance.calls() > 0);
+
+    const receipt = forwardingProxy({
+        activeInstallationDigest: digest,
+        preferenceRevision: 1,
+        sessionPreference,
+        globalLanguage: null,
+        localChoiceEvent: {
+            installationDigest: digest,
+            preferenceRevision: 1,
+            surface: 'subtitle-settings',
+            choice: 'enabled',
+        },
+    });
+    assert.equal(issueExplicitLocalChoiceReceipt(receipt.proxy), null);
+    assert.ok(receipt.calls() > 0);
+});
+
+test('undeclared top-level account or migration authority fails closed', () => {
+    const activeInstallationDigest = 'a'.repeat(64);
+    const sessionPreference = { enabled: true, language: 'eng' };
+    const globalLanguage = 'eng';
+    const localChoiceEvent = {
+        installationDigest: activeInstallationDigest,
+        preferenceRevision: 1,
+        surface: 'first-run',
+        choice: 'enabled',
+    };
+    const receipt = issueExplicitLocalChoiceReceipt({
+        activeInstallationDigest,
+        preferenceRevision: 1,
+        sessionPreference,
+        globalLanguage,
+        localChoiceEvent,
+    });
+    const storageReadback = {
+        scope: 'installation-local',
+        installationDigest: activeInstallationDigest,
+        preferenceRevision: 1,
+        binding: receipt.binding,
+    };
+
+    assert.equal(verifySubtitlePreferenceProvenance({
+        activeInstallationDigest,
+        sessionPreference,
+        globalLanguage,
+        preferenceProvenance: receipt,
+        accountHydrated: true,
+    }), false);
+    assert.equal(needsSubtitlePreferenceChoice({
+        activeInstallationDigest,
+        sessionPreference,
+        globalLanguage,
+        preferenceProvenance: receipt,
+        accountHydrated: true,
+    }), true);
+    assert.equal(issueExplicitLocalChoiceReceipt({
+        activeInstallationDigest,
+        preferenceRevision: 1,
+        sessionPreference,
+        globalLanguage,
+        localChoiceEvent,
+        accountHydrated: true,
+    }), null);
+    assert.equal(promoteStoredPreferenceReceipt({
+        activeInstallationDigest,
+        sessionPreference,
+        globalLanguage,
+        storedReceipt: receipt,
+        storageReadback,
+        migratedFromOfficialApp: true,
+    }), null);
+});
+
+test('same-installation receipts cannot promote missing or null enabled state into authority', () => {
+    const activeInstallationDigest = 'a'.repeat(64);
+    const globalLanguage = 'eng';
+
+    for (const sessionPreference of [{ language: 'eng' }, { enabled: null, language: 'eng' }]) {
+        const preferenceProvenance = {
+            schemaVersion: 1,
+            kind: 'same-installation-setting',
+            installationDigest: activeInstallationDigest,
+            preferenceRevision: 1,
+            binding: preferenceBinding({ sessionPreference, globalLanguage }),
+        };
+
+        assert.equal(verifySubtitlePreferenceProvenance({
+            activeInstallationDigest,
+            sessionPreference,
+            globalLanguage,
+            preferenceProvenance,
+        }), false);
+        assert.equal(needsSubtitlePreferenceChoice({
+            activeInstallationDigest,
+            sessionPreference,
+            globalLanguage,
+            preferenceProvenance,
+        }), true);
+    }
+});
+
+test('hostile top-level player requests fail closed without getter execution', () => {
+    const storage = new MemoryStorage();
+    let reads = 0;
+    const accessorRequest = { storage };
+    Object.defineProperty(accessorRequest, 'options', {
+        enumerable: true,
+        get() { reads += 1; return smart; },
+    });
+    assert.deepEqual(readPlayerSubtitleAutomation(accessorRequest), {
+        subtitle: false,
+        audio: false,
+        reason: 'installation_preference_unverified',
+        provenance: null,
+    });
+    assert.equal(reads, 0);
+
+    const revoked = Proxy.revocable({ storage, options: smart }, {});
+    revoked.revoke();
+    assert.doesNotThrow(() => {
+        assert.equal(readPlayerSubtitleAutomation(revoked.proxy).subtitle, false);
+    });
+
+    const hidden = { storage, options: smart };
+    Object.defineProperty(hidden, 'accountHydration', { value: true });
+    assert.equal(readPlayerSubtitleAutomation(hidden).subtitle, false);
+    const symbol = { storage, options: smart };
+    symbol[Symbol('authority')] = true;
+    assert.equal(readPlayerSubtitleAutomation(symbol).subtitle, false);
+});
+
+const record = (storage, options = smart) => {
+    storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
+    return recordExplicitLocalChoice({
+        storage,
+        randomBytes: entropy,
+        sessionPreference: { enabled: true, language: options.subtitleLanguages[0] },
+        globalLanguage: null,
+        surface: 'subtitle-settings',
+    });
+};
+
+test('default Smart policy cannot become player consent without a local receipt', () => {
+    const gate = readPlayerSubtitleAutomation({ storage: new MemoryStorage(), options: smart });
+    assert.deepEqual(gate, {
+        subtitle: false,
+        audio: false,
+        reason: 'installation_preference_unverified',
+        provenance: null,
+    });
+    assert.equal(Object.isFrozen(gate), true);
+});
+
+test('exact installation-local readback enables both bounded automation paths', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+    const gate = readPlayerSubtitleAutomation({ storage, options: smart });
+    assert.equal(gate.subtitle, true);
+    assert.equal(gate.audio, true);
+    assert.equal(gate.reason, 'installation_preference_verified');
+    assert.equal(gate.provenance?.kind, 'same-installation-setting');
+});
+
+test('Always On also requires the exact bound local receipt', () => {
+    const options = { ...smart, mode: 'on' };
+    const storage = new MemoryStorage();
+    assert.equal(readPlayerSubtitleAutomation({ storage, options }).subtitle, false);
+    assert.ok(record(storage, options));
+    assert.equal(readPlayerSubtitleAutomation({ storage, options }).subtitle, true);
+});
+
+test('changed language, corrupt receipt and cross-installation identity fail closed', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+    const changed = { ...smart, subtitleLanguages: ['fr'] };
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: changed }).subtitle, false);
+
+    const receipt = storage.getItem(PREFERENCE_RECEIPT_KEY);
+    storage.setItem(PREFERENCE_RECEIPT_KEY, `${receipt}x`);
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
+
+    storage.setItem(PREFERENCE_RECEIPT_KEY, receipt);
+    storage.setItem(INSTALLATION_DIGEST_KEY, 'b'.repeat(64));
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
+});
+
+test('malformed stored policy cannot reuse a valid local receipt', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+    storage.setItem(policy.STORAGE_KEY, '{');
+    const normalizedFallback = policy.read(storage);
+    assert.deepEqual(normalizedFallback, smart);
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: normalizedFallback,
+    }).subtitle, false);
+});
+
+test('stale or non-canonical policy cannot reuse a receipt with the same language', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+    const stale = { ...smart, preferUnderstoodAudio: false };
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: stale }).subtitle, false);
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: { ...smart, accountHydration: true },
+    }).subtitle, false);
+    storage.setItem(policy.STORAGE_KEY, JSON.stringify({ ...smart, injected: true }));
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
+});
+
+test('caller serialization hooks and hidden authority fields fail closed', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+
+    const disguised = {
+        ...smart,
+        accountHydration: true,
+        toJSON() {
+            return smart;
+        },
+    };
+    assert.equal(JSON.stringify(disguised), JSON.stringify(smart));
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: disguised }).subtitle, false);
+
+    const hidden = { ...smart };
+    Object.defineProperty(hidden, 'accountHydration', { value: true, enumerable: false });
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: hidden }).subtitle, false);
+
+    const inherited = Object.assign(Object.create({ accountHydration: true }), smart);
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: inherited }).subtitle, false);
+});
+
+test('nested policy arrays are snapshotted once and hostile access cannot escape', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+
+    const hostile = new Proxy(['en'], {
+        get(target, key, receiver) {
+            if (key === 'slice' || key === 'every') throw new Error('hostile nested array');
+            return Reflect.get(target, key, receiver);
+        },
+    });
+    assert.doesNotThrow(() => {
+        const gate = readPlayerSubtitleAutomation({
+            storage,
+            options: { ...smart, understoodLanguages: hostile },
+        });
+        assert.equal(gate.subtitle, true);
+        assert.equal(gate.audio, true);
+        assert.equal(gate.reason, 'installation_preference_verified');
+    });
+
+    const accessor = ['en'];
+    Object.defineProperty(accessor, '0', {
+        get() { throw new Error('nested accessor'); },
+        enumerable: true,
+    });
+    assert.doesNotThrow(() => {
+        assert.equal(readPlayerSubtitleAutomation({
+            storage,
+            options: { ...smart, subtitleLanguages: accessor },
+        }).subtitle, false);
+    });
+
+    const hidden = ['en'];
+    Object.defineProperty(hidden, 'accountHydration', { value: true });
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: { ...smart, understoodLanguages: hidden },
+    }).subtitle, false);
+
+    const symbol = ['en'];
+    symbol[Symbol('authority')] = true;
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: { ...smart, subtitleLanguages: symbol },
+    }).subtitle, false);
+
+    const inherited = Object.setPrototypeOf(['en'], { accountHydration: true });
+    assert.equal(readPlayerSubtitleAutomation({
+        storage,
+        options: { ...smart, subtitleLanguages: inherited },
+    }).subtitle, false);
+});
+
+test('player promotion requires a stable policy, installation and receipt tuple', () => {
+    const source = new MemoryStorage();
+    assert.ok(record(source));
+    const entries = [...source.values.entries()];
+    const mutations = [
+        (storage) => storage.values.set(
+            policy.STORAGE_KEY,
+            JSON.stringify({ ...smart, preferUnderstoodAudio: false }),
+        ),
+        (storage) => storage.values.set(INSTALLATION_DIGEST_KEY, 'b'.repeat(64)),
+        (storage) => storage.values.set(
+            PREFERENCE_RECEIPT_KEY,
+            `${storage.values.get(PREFERENCE_RECEIPT_KEY)}x`,
+        ),
+    ];
+
+    for (const mutate of mutations) {
+        const storage = new DriftAfterPromotionStorage(entries, mutate);
+        const gate = readPlayerSubtitleAutomation({ storage, options: smart });
+        assert.equal(gate.subtitle, false);
+        assert.equal(gate.audio, false);
+        assert.equal(gate.reason, 'installation_preference_unverified');
+        assert.equal(gate.provenance, null);
+    }
+});
+
+test('explicit Off may disable subtitles but cannot drive audio automation', () => {
+    const storage = new MemoryStorage();
+    const options = { ...smart, mode: 'off' };
+    storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
+    const gate = readPlayerSubtitleAutomation({
+        storage,
+        options,
+    });
+    assert.deepEqual(gate, {
+        subtitle: true,
+        audio: false,
+        reason: 'subtitles_disabled',
+        provenance: null,
+    });
+});
+
+test('original Stremio mode inherits subtitle handling and blocks enhanced audio', () => {
+    const storage = new MemoryStorage();
+    const options = { ...smart, mode: 'stremio' };
+    storage.setItem(policy.STORAGE_KEY, JSON.stringify(options));
+    const gate = readPlayerSubtitleAutomation({
+        storage,
+        options,
+    });
+    assert.deepEqual(gate, {
+        subtitle: true,
+        audio: false,
+        reason: 'stremio_selected',
+        provenance: null,
+    });
+});
+
+test('Off and original Stremio require the same stable stored policy tuple', () => {
+    const storage = new MemoryStorage();
+    assert.ok(record(storage));
+    for (const mode of ['off', 'stremio']) {
+        const gate = readPlayerSubtitleAutomation({
+            storage,
+            options: { ...smart, mode },
+        });
+        assert.equal(gate.subtitle, false);
+        assert.equal(gate.audio, false);
+        assert.equal(gate.reason, 'installation_preference_unverified');
+    }
+
+    const off = { ...smart, mode: 'off' };
+    const source = new MemoryStorage([[policy.STORAGE_KEY, JSON.stringify(off)]]);
+    const drift = new DriftAfterPromotionStorage(
+        [...source.values.entries()],
+        (target) => target.values.set(policy.STORAGE_KEY, JSON.stringify(smart)),
+        4,
+    );
+    assert.equal(readPlayerSubtitleAutomation({ storage: drift, options: off }).subtitle, false);
+});
+
+test('both production player hooks consume the same gate and storage-key set', async () => {
+    const [subtitles, audio, gateSource] = await Promise.all([
+        readFile(new URL('../src/routes/Player/useSubtitles.ts', import.meta.url), 'utf8'),
+        readFile(new URL('../src/routes/Player/useAudio.ts', import.meta.url), 'utf8'),
+        readFile(new URL('../src/routes/Player/intelligentSubtitles/preference-player-gate.mjs', import.meta.url), 'utf8'),
+    ]);
+    for (const source of [subtitles, audio]) {
+        assert.match(source, /readPlayerSubtitleAutomation/);
+        assert.match(source, /PLAYER_STORAGE_KEYS/);
+        assert.match(source, /addEventListener\(PLAYER_PREFERENCE_EVENT, refresh\)/);
+        assert.match(source, /removeEventListener\(PLAYER_PREFERENCE_EVENT, refresh\)/);
+    }
+    assert.match(subtitles, /enhancedAutomation\.subtitle/);
+    assert.match(audio, /enhancedAutomation\.audio/);
+    assert.deepEqual(PLAYER_STORAGE_KEYS, [
+        policy.STORAGE_KEY,
+        INSTALLATION_DIGEST_KEY,
+        PREFERENCE_RECEIPT_KEY,
+    ]);
+    assert.equal(PLAYER_PREFERENCE_EVENT, 'stremio-enhanced:subtitle-preference-stored-v1');
+    assert.doesNotMatch(gateSource, /accountHydrat|fetch\(|XMLHttpRequest|WebSocket|device|package/i);
+});
+
+
