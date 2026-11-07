@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {readPlayerSubtitleAutomation} from '../src/routes/Player/intelligentSubtitles/preference-player-gate.mjs';
 import {commitSubtitleSettingsChoice} from '../src/routes/Player/intelligentSubtitles/preference-settings-write.mjs';
 import {INSTALLATION_DIGEST_KEY,PREFERENCE_RECEIPT_KEY} from '../src/routes/Player/intelligentSubtitles/preference-store.mjs';
 const base=()=>({mode:'smart',understoodLanguages:['en'],subtitleLanguages:['en'],preferUnderstoodAudio:true,unknownAudio:'off',suspectedPictureSubtitles:'hold',allowHearingImpaired:false,allowForcedOnly:false,forcedTranslationsForUnderstoodAudio:false});
@@ -23,6 +24,18 @@ test('top-level settings request fails closed without invoking accessors or get 
     assert.doesNotThrow(()=>assert.equal(commitSubtitleSettingsChoice(ownKeysProxy).ok,false));
 });
 test('exact mode control event commits policy and proven local evidence',()=>{const s=storage();const before=base(),after={...base(),mode:'on'};const r=commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:before,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:'automatic-mode',value:'on'}});assert.equal(r.ok,true);assert.equal(r.provenance.kind,'same-installation-setting');assert.ok(s.getItem(PREFERENCE_RECEIPT_KEY));});
+test('subsidiary settings cannot originate automatic subtitle consent',()=>{for(const candidate of [
+    {control:'understood-primary',value:'fr',patch:{understoodLanguages:['fr']}},
+    {control:'understood-secondary',value:'fr',patch:{understoodLanguages:['en','fr']}},
+    {control:'subtitle-primary',value:'fr',patch:{subtitleLanguages:['fr']}},
+    {control:'subtitle-secondary',value:'fr',patch:{subtitleLanguages:['en','fr']}},
+    {control:'prefer-understood-audio',value:false,patch:{preferUnderstoodAudio:false}},
+    {control:'unknown-audio',value:'subtitles',patch:{unknownAudio:'subtitles'}},
+    {control:'picture-subtitles',value:'ignore',patch:{suspectedPictureSubtitles:'ignore'}},
+    {control:'hearing-impaired',value:true,patch:{allowHearingImpaired:true}},
+    {control:'forced-only',value:true,patch:{allowForcedOnly:true}},
+    {control:'forced-translations',value:true,patch:{forcedTranslationsForUnderstoodAudio:true}},
+]){const s=storage();const before=base(),after={...before,...candidate.patch};const r=commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:before,nextOptions:after,localChoiceEvent:{surface:'subtitle-settings',control:candidate.control,value:candidate.value}});assert.equal(r.ok,true,candidate.control);assert.equal(r.provenance,null,candidate.control);assert.equal(s.getItem(INSTALLATION_DIGEST_KEY),null,candidate.control);assert.equal(s.getItem(PREFERENCE_RECEIPT_KEY),null,candidate.control);assert.deepEqual(readPlayerSubtitleAutomation({storage:s,options:after}),{subtitle:false,audio:false,reason:'installation_preference_unverified',provenance:null},candidate.control);}});
 test('event mismatch and injected changes fail without writes',()=>{for(const after of [{...base(),mode:'on',allowForcedOnly:true},{...base(),mode:'on'}]){const s=storage();const event={surface:'subtitle-settings',control:'automatic-mode',value:after.mode==='on'?'smart':'on'};assert.equal(commitSubtitleSettingsChoice({storage:s,randomBytes:entropy,currentOptions:base(),nextOptions:after,localChoiceEvent:event}).ok,false);assert.deepEqual(s.snapshot(),{});}});
 test('hostile option and event records fail closed without accessor execution or writes',()=>{
     const cases=[];
