@@ -185,6 +185,18 @@ export function commitSubtitleSettingsChoice(input = {}) {
     const readTuple = () => keys.map((key) => [key, safeGet(storage, key)]);
     const tupleMatches = (tuple, expected) => tuple.every(([key, raw]) =>
         raw !== undefined && expected.has(key) && raw === expected.get(key));
+    const priorProvenance = current.mode === 'smart' || current.mode === 'on' ?
+        loadStoredPreference({
+            storage,
+            sessionPreference: {
+                enabled: true,
+                language: current.subtitleLanguages[0],
+            },
+            globalLanguage: null,
+        })
+        : null;
+    const snapshotTuple = new Map(snapshots);
+    if (!tupleMatches(readTuple(), snapshotTuple)) return rejected();
 
     try {
         storage.setItem(policy.STORAGE_KEY, policyRaw);
@@ -213,6 +225,21 @@ export function commitSubtitleSettingsChoice(input = {}) {
         ]);
         if (!tupleMatches(readTuple(), expected) || !tupleMatches(readTuple(), expected)) {
             return fail(transactionWrites);
+        }
+        return Object.freeze({ ok: true, provenance: null, rollbackVerified: true });
+    }
+
+    // A change to a subsidiary subtitle setting is not consent to turn the
+    // automatic feature on. It may refresh an already verified local choice,
+    // but only the automatic-mode control can originate that choice.
+    if (event.control !== 'automatic-mode' && !priorProvenance) {
+        const expected = new Map([
+            [policy.STORAGE_KEY, policyRaw],
+            [INSTALLATION_DIGEST_KEY, snapshots[1][1]],
+            [PREFERENCE_RECEIPT_KEY, snapshots[2][1]],
+        ]);
+        if (!tupleMatches(readTuple(), expected) || !tupleMatches(readTuple(), expected)) {
+            return fail();
         }
         return Object.freeze({ ok: true, provenance: null, rollbackVerified: true });
     }
