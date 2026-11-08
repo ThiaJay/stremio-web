@@ -4,7 +4,7 @@ minimumReleaseAgeExclude:
 blockExoticSubdeps: false
 
 overrides:
-  qs: 6.16.0
+  qs: 6.16.1
   '@babel/runtime': 7.29.2
   shell-quote: 1.11.0
   websocket-driver: 0.7.5
