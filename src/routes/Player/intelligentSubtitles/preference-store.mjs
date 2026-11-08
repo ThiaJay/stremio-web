@@ -195,15 +195,18 @@ export function recordExplicitLocalChoice(input = {}) {
         [PREFERENCE_RECEIPT_KEY, receiptBefore],
     ];
     if (digestBefore === null && (revisionBefore !== null || receiptBefore !== null)) return null;
-    if ((revisionBefore === null) !== (receiptBefore === null)) return null;
+    if (revisionBefore !== null && receiptBefore === null) return null;
     const installationDigest = ensureInstallationDigest({ storage, randomBytes });
     if (!installationDigest) return null;
     const digestWrite = [[INSTALLATION_DIGEST_KEY, installationDigest]];
     const rollbackDigest = () => restore(storage, snapshots, digestWrite);
     const previous = receiptBefore === null ? null : parseEnvelope(receiptBefore, installationDigest);
-    const previousRevision = parseRevision(revisionBefore);
+    const revisionMarker = parseRevision(revisionBefore);
+    const previousRevision = revisionMarker ??
+        (revisionBefore === null && previous ? previous.receipt.preferenceRevision : null);
     if (receiptBefore !== null && (!previous || previousRevision === null ||
-            previous.receipt.preferenceRevision !== previousRevision)) {
+            (revisionMarker !== null &&
+                previous.receipt.preferenceRevision !== revisionMarker))) {
         rollbackDigest();
         return null;
     }

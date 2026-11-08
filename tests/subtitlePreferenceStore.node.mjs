@@ -376,3 +376,44 @@ test('late concurrent revision drift rejects promotion without restoring stale g
   }), null);
   assert.equal(storage.snapshot()[PREFERENCE_REVISION_KEY], concurrentRevision);
 });
+
+test('fresh explicit choice upgrades a valid pre-marker receipt and advances its revision', async () => {
+  const {
+    recordExplicitLocalChoice, PREFERENCE_REVISION_KEY,
+  } = await fresh();
+  const storage = memoryStorage();
+  assert.ok(recordExplicitLocalChoice({
+    storage, randomBytes: entropy(), sessionPreference: enabled,
+    globalLanguage: 'eng', surface: 'subtitle-settings',
+  }));
+  storage.removeItem(PREFERENCE_REVISION_KEY);
+  const promoted = recordExplicitLocalChoice({
+    storage,
+    randomBytes: () => {
+      throw new Error('existing installation identity must be reused');
+    },
+    sessionPreference: {enabled: true, language: 'fra', source: 'external'},
+    globalLanguage: 'fra',
+    surface: 'subtitle-settings',
+  });
+  assert.equal(promoted?.preferenceRevision, 2);
+  assert.equal(promoted?.binding.sessionLanguage, 'fra');
+  assert.equal(promoted?.binding.sessionSource, 'external');
+  assert.equal(storage.snapshot()[PREFERENCE_REVISION_KEY], '2');
+});
+
+test('corrupt pre-marker evidence remains unchanged on a fresh explicit choice', async () => {
+  const {
+    recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY,
+  } = await fresh();
+  const seed = {
+    [INSTALLATION_DIGEST_KEY]: 'aa'.repeat(32),
+    [PREFERENCE_RECEIPT_KEY]: '{',
+  };
+  const storage = memoryStorage(seed);
+  assert.equal(recordExplicitLocalChoice({
+    storage, randomBytes: entropy(), sessionPreference: enabled,
+    globalLanguage: 'eng', surface: 'subtitle-settings',
+  }), null);
+  assert.deepEqual(storage.snapshot(), seed);
+});
