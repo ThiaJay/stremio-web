@@ -2,6 +2,7 @@ import policy from '../enhancedSubtitlePolicy.js';
 import {
     INSTALLATION_DIGEST_KEY,
     PREFERENCE_RECEIPT_KEY,
+    PREFERENCE_REVISION_KEY,
     loadStoredPreference,
     recordExplicitLocalChoice,
 } from './preference-store.mjs';
@@ -171,7 +172,10 @@ export function commitSubtitleSettingsChoice(input = {}) {
         return rejected();
     }
 
-    const keys = [policy.STORAGE_KEY, INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY];
+    const keys = [
+        policy.STORAGE_KEY, INSTALLATION_DIGEST_KEY,
+        PREFERENCE_RECEIPT_KEY, PREFERENCE_REVISION_KEY,
+    ];
     const snapshots = keys.map((key) => [key, safeGet(storage, key)]);
     if (snapshots.some(([, raw]) => raw === undefined)) return rejected();
     const storedOptions = parseStoredOptions(snapshots[0][1]);
@@ -212,9 +216,11 @@ export function commitSubtitleSettingsChoice(input = {}) {
         const transactionWrites = [
             [policy.STORAGE_KEY, policyRaw],
             [PREFERENCE_RECEIPT_KEY, null],
+            [PREFERENCE_REVISION_KEY, null],
         ];
         try {
             storage.removeItem(PREFERENCE_RECEIPT_KEY);
+            storage.removeItem(PREFERENCE_REVISION_KEY);
         } catch {
             return fail(transactionWrites);
         }
@@ -222,6 +228,7 @@ export function commitSubtitleSettingsChoice(input = {}) {
             [policy.STORAGE_KEY, policyRaw],
             [INSTALLATION_DIGEST_KEY, snapshots[1][1]],
             [PREFERENCE_RECEIPT_KEY, null],
+            [PREFERENCE_REVISION_KEY, null],
         ]);
         if (!tupleMatches(readTuple(), expected) || !tupleMatches(readTuple(), expected)) {
             return fail(transactionWrites);
@@ -237,6 +244,7 @@ export function commitSubtitleSettingsChoice(input = {}) {
             [policy.STORAGE_KEY, policyRaw],
             [INSTALLATION_DIGEST_KEY, snapshots[1][1]],
             [PREFERENCE_RECEIPT_KEY, snapshots[2][1]],
+            [PREFERENCE_REVISION_KEY, snapshots[3][1]],
         ]);
         if (!tupleMatches(readTuple(), expected) || !tupleMatches(readTuple(), expected)) {
             return fail();
@@ -271,6 +279,7 @@ export function commitSubtitleSettingsChoice(input = {}) {
         [policy.STORAGE_KEY, policyRaw],
         [INSTALLATION_DIGEST_KEY, provenance.installationDigest],
         [PREFERENCE_RECEIPT_KEY, receiptRaw],
+        [PREFERENCE_REVISION_KEY, String(provenance.preferenceRevision)],
     ];
     const expected = new Map(transactionWrites);
     if (!tupleMatches(readTuple(), expected)) return fail(transactionWrites);

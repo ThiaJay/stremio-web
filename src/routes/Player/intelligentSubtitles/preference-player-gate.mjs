@@ -2,6 +2,7 @@ import policy from '../enhancedSubtitlePolicy.js';
 import {
     INSTALLATION_DIGEST_KEY,
     PREFERENCE_RECEIPT_KEY,
+    PREFERENCE_REVISION_KEY,
     loadStoredPreference,
 } from './preference-store.mjs';
 
@@ -9,6 +10,7 @@ export const PLAYER_STORAGE_KEYS = Object.freeze([
     policy.STORAGE_KEY,
     INSTALLATION_DIGEST_KEY,
     PREFERENCE_RECEIPT_KEY,
+    PREFERENCE_REVISION_KEY,
 ]);
 
 export const PLAYER_PREFERENCE_EVENT = 'stremio-enhanced:subtitle-preference-stored-v1';
@@ -117,15 +119,18 @@ const readPlayerStoredTuple = (storage) => {
     let policyRaw;
     let installationDigestRaw;
     let receiptRaw;
+    let revisionRaw;
     try {
         policyRaw = storage.getItem(policy.STORAGE_KEY);
         installationDigestRaw = storage.getItem(INSTALLATION_DIGEST_KEY);
         receiptRaw = storage.getItem(PREFERENCE_RECEIPT_KEY);
+        revisionRaw = storage.getItem(PREFERENCE_REVISION_KEY);
     } catch {
         return null;
     }
     if ((installationDigestRaw !== null && typeof installationDigestRaw !== 'string') ||
-            (receiptRaw !== null && typeof receiptRaw !== 'string')) return null;
+            (receiptRaw !== null && typeof receiptRaw !== 'string') ||
+            (revisionRaw !== null && typeof revisionRaw !== 'string')) return null;
     let storedPolicy;
     if (policyRaw === null) {
         storedPolicy = policy.normalise(null);
@@ -148,6 +153,7 @@ const readPlayerStoredTuple = (storage) => {
         policyRaw,
         installationDigestRaw,
         receiptRaw,
+        revisionRaw,
         storedPolicy,
     });
 };
@@ -155,7 +161,8 @@ const readPlayerStoredTuple = (storage) => {
 const sameTuple = (left, right) => left && right &&
     left.policyRaw === right.policyRaw &&
     left.installationDigestRaw === right.installationDigestRaw &&
-    left.receiptRaw === right.receiptRaw;
+    left.receiptRaw === right.receiptRaw &&
+    left.revisionRaw === right.revisionRaw;
 
 const result = (subtitle, audio, reason, provenance = null) => Object.freeze({
     subtitle,

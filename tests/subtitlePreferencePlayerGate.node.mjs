@@ -6,6 +6,7 @@ import policy from '../src/routes/Player/enhancedSubtitlePolicy.js';
 import {
     INSTALLATION_DIGEST_KEY,
     PREFERENCE_RECEIPT_KEY,
+    PREFERENCE_REVISION_KEY,
     recordExplicitLocalChoice,
 } from '../src/routes/Player/intelligentSubtitles/preference-store.mjs';
 import {
@@ -345,6 +346,10 @@ test('changed language, corrupt receipt and cross-installation identity fail clo
     assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
 
     storage.setItem(PREFERENCE_RECEIPT_KEY, receipt);
+    storage.setItem(PREFERENCE_REVISION_KEY, '2');
+    assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
+
+    storage.setItem(PREFERENCE_REVISION_KEY, '1');
     storage.setItem(INSTALLATION_DIGEST_KEY, 'b'.repeat(64));
     assert.equal(readPlayerSubtitleAutomation({ storage, options: smart }).subtitle, false);
 });
@@ -548,6 +553,7 @@ test('both production player hooks consume the same gate and storage-key set', a
         policy.STORAGE_KEY,
         INSTALLATION_DIGEST_KEY,
         PREFERENCE_RECEIPT_KEY,
+        PREFERENCE_REVISION_KEY,
     ]);
     assert.equal(PLAYER_PREFERENCE_EVENT, 'stremio-enhanced:subtitle-preference-stored-v1');
     assert.doesNotMatch(gateSource, /accountHydrat|fetch\(|XMLHttpRequest|WebSocket|device|package/i);

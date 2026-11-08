@@ -90,6 +90,7 @@ export function promoteStoredPreferenceReceipt(input = {}) {
   if (!stored || !readback) return null;
   if (!verifySubtitlePreferenceProvenance({
     activeInstallationDigest, sessionPreference: preference, globalLanguage,
+    preferenceRevision: stored.preferenceRevision,
     preferenceProvenance: stored,
   })) return null;
   if (readback.scope !== 'installation-local' ||

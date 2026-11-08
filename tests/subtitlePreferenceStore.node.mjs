@@ -22,8 +22,8 @@ const enabled = Object.freeze({ enabled: true, language: 'eng', source: 'embedde
 
 test('Foundation runtime modules retain their exact reviewed Git blob identities', async () => {
   for (const [name, expected] of [
-    ['preference-provenance.mjs', '69d0c3651025558442eaf1cbcccffe7311a96684'],
-    ['preference-receipt.mjs', '61f275a0dc806ee96834d008fe160a022502a807'],
+    ['preference-provenance.mjs', 'c11d7964b564d6f3af8224ac8f1f56aa5e1fcb4d'],
+    ['preference-receipt.mjs', '06e94487e555d77a4b501353ead52fb18be7fe9a'],
   ]) {
     const content = await readFile(new URL("../src/routes/Player/intelligentSubtitles/" + name, import.meta.url));
     const actual = createHash('sha1').update(`blob ${content.byteLength}\0`).update(content).digest('hex');
@@ -77,7 +77,7 @@ test('hydrated enabled state cannot create consent without a trusted UI surface'
 });
 
 test('explicit first-run choice writes, reads back and promotes exact local evidence', async () => {
-  const { recordExplicitLocalChoice, loadStoredPreference } = await fresh();
+  const { recordExplicitLocalChoice, loadStoredPreference, PREFERENCE_REVISION_KEY } = await fresh();
   const storage = memoryStorage();
   const promoted = recordExplicitLocalChoice({
     storage, randomBytes: entropy(), sessionPreference: enabled, globalLanguage: 'ENG', surface: 'first-run',
@@ -85,13 +85,33 @@ test('explicit first-run choice writes, reads back and promotes exact local evid
   assert.equal(promoted.kind, 'same-installation-setting');
   assert.equal(promoted.installationDigest, 'ab'.repeat(32));
   assert.equal(promoted.preferenceRevision, 1);
+  assert.equal(storage.snapshot()[PREFERENCE_REVISION_KEY], '1');
   assert.deepEqual(loadStoredPreference({ storage, sessionPreference: enabled, globalLanguage: 'eng' }), promoted);
+});
+
+test('load rejects a missing or mismatched current revision marker', async () => {
+  const {
+    recordExplicitLocalChoice, loadStoredPreference, PREFERENCE_REVISION_KEY,
+  } = await fresh();
+  const storage = memoryStorage();
+  assert.ok(recordExplicitLocalChoice({
+    storage, randomBytes: entropy(), sessionPreference: enabled,
+    globalLanguage: 'eng', surface: 'first-run',
+  }));
+  storage.setItem(PREFERENCE_REVISION_KEY, '2');
+  assert.equal(loadStoredPreference({
+    storage, sessionPreference: enabled, globalLanguage: 'eng',
+  }), null);
+  storage.removeItem(PREFERENCE_REVISION_KEY);
+  assert.equal(loadStoredPreference({
+    storage, sessionPreference: enabled, globalLanguage: 'eng',
+  }), null);
 });
 
 test('load promotion requires stable exact digest and receipt readback', async () => {
   const {
     recordExplicitLocalChoice, loadStoredPreference,
-    INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY,
+    INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY, PREFERENCE_REVISION_KEY,
   } = await fresh();
   const accepted = memoryStorage();
   recordExplicitLocalChoice({
@@ -116,6 +136,10 @@ test('load promotion requires stable exact digest and receipt readback', async (
   }), null);
   assert.equal(loadStoredPreference({
     storage: driftingStorage(PREFERENCE_RECEIPT_KEY, `${seed[PREFERENCE_RECEIPT_KEY]} `),
+    sessionPreference: enabled, globalLanguage: 'eng',
+  }), null);
+  assert.equal(loadStoredPreference({
+    storage: driftingStorage(PREFERENCE_REVISION_KEY, '2'),
     sessionPreference: enabled, globalLanguage: 'eng',
   }), null);
 });
@@ -156,9 +180,16 @@ test('cross-installation and altered bindings fail closed on load', async () => 
 });
 
 test('corrupt, injected and oversized receipts are rejected without replacement', async () => {
-  const { recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY } = await fresh();
+  const {
+    recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY,
+    PREFERENCE_RECEIPT_KEY, PREFERENCE_REVISION_KEY,
+  } = await fresh();
   for (const raw of ['{', JSON.stringify({ schemaVersion: 1, scope: 'installation-local', receipt: {}, account: true }), 'x'.repeat(4097)]) {
-    const seed = { [INSTALLATION_DIGEST_KEY]: 'aa'.repeat(32), [PREFERENCE_RECEIPT_KEY]: raw };
+    const seed = {
+      [INSTALLATION_DIGEST_KEY]: 'aa'.repeat(32),
+      [PREFERENCE_REVISION_KEY]: '1',
+      [PREFERENCE_RECEIPT_KEY]: raw,
+    };
     const storage = memoryStorage(seed);
     assert.equal(recordExplicitLocalChoice({ storage, randomBytes: entropy(), sessionPreference: enabled, surface: 'first-run' }), null);
     assert.deepEqual(storage.snapshot(), seed);
@@ -166,7 +197,10 @@ test('corrupt, injected and oversized receipts are rejected without replacement'
 });
 
 test('revision overflow fails closed without replacing stored evidence', async () => {
-  const { recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY } = await fresh();
+  const {
+    recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY,
+    PREFERENCE_RECEIPT_KEY, PREFERENCE_REVISION_KEY,
+  } = await fresh();
   const installationDigest = 'aa'.repeat(32);
   const receipt = {
     schemaVersion: 1,
@@ -184,6 +218,7 @@ test('revision overflow fails closed without replacing stored evidence', async (
   };
   const seed = {
     [INSTALLATION_DIGEST_KEY]: installationDigest,
+    [PREFERENCE_REVISION_KEY]: String(Number.MAX_SAFE_INTEGER),
     [PREFERENCE_RECEIPT_KEY]: JSON.stringify({ schemaVersion: 1, scope: 'installation-local', receipt }),
   };
   const storage = memoryStorage(seed);
@@ -208,7 +243,10 @@ test('receipt write refusal restores a newly created identity', async () => {
 });
 
 test('unknown immediate receipt readback drift is never overwritten by rollback', async () => {
-  const { recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY, PREFERENCE_RECEIPT_KEY } = await fresh();
+  const {
+    recordExplicitLocalChoice, INSTALLATION_DIGEST_KEY,
+    PREFERENCE_RECEIPT_KEY, PREFERENCE_REVISION_KEY,
+  } = await fresh();
   const original = {
     [INSTALLATION_DIGEST_KEY]: 'aa'.repeat(32),
   };
@@ -227,6 +265,7 @@ test('unknown immediate receipt readback drift is never overwritten by rollback'
   }), null);
   assert.deepEqual(storage.snapshot(), {
     ...original,
+    [PREFERENCE_REVISION_KEY]: '1',
     [PREFERENCE_RECEIPT_KEY]: driftedReceipt,
   });
 });
@@ -316,4 +355,24 @@ test('late concurrent receipt drift rejects promotion without restoring stale ev
     globalLanguage: 'eng', surface: 'subtitle-settings',
   }), null);
   assert.equal(storage.snapshot()[PREFERENCE_RECEIPT_KEY], concurrentReceipt);
+});
+
+test('late concurrent revision drift rejects promotion without restoring stale generation', async () => {
+  const { recordExplicitLocalChoice, PREFERENCE_REVISION_KEY } = await fresh();
+  const storage = memoryStorage();
+  const originalGet = storage.getItem.bind(storage);
+  const originalSet = storage.setItem.bind(storage);
+  let revisionReads = 0;
+  const concurrentRevision = '9';
+  storage.getItem = (key) => {
+    if (key === PREFERENCE_REVISION_KEY && ++revisionReads === 3) {
+      originalSet(key, concurrentRevision);
+    }
+    return originalGet(key);
+  };
+  assert.equal(recordExplicitLocalChoice({
+    storage, randomBytes: entropy(), sessionPreference: enabled,
+    globalLanguage: 'eng', surface: 'subtitle-settings',
+  }), null);
+  assert.equal(storage.snapshot()[PREFERENCE_REVISION_KEY], concurrentRevision);
 });

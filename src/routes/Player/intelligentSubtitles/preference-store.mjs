@@ -9,6 +9,7 @@ import {
 
 export const INSTALLATION_DIGEST_KEY = 'stremio-enhanced.subtitle-provenance.installation.v1';
 export const PREFERENCE_RECEIPT_KEY = 'stremio-enhanced.subtitle-provenance.receipt.v1';
+export const PREFERENCE_REVISION_KEY = 'stremio-enhanced.subtitle-provenance.revision.v1';
 
 const DIGEST = /^[0-9a-f]{64}$/;
 const MAX_RECEIPT_BYTES = 4096;
@@ -49,6 +50,11 @@ const safeGet = (storage, key) => {
     } catch {
         return undefined;
     }
+};
+const parseRevision = (value) => {
+    if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return null;
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && String(parsed) === value ? parsed : null;
 };
 
 const bytesToDigest = (bytes) => {
@@ -98,6 +104,7 @@ const parseEnvelope = (raw, installationDigest) => {
         activeInstallationDigest: installationDigest,
         sessionPreference,
         globalLanguage: receipt.binding?.globalLanguage,
+        preferenceRevision: receipt.preferenceRevision,
         preferenceProvenance: receipt,
     })) return null;
     return Object.freeze({ envelope, receipt });
@@ -143,10 +150,14 @@ export function loadStoredPreference(input = {}) {
     if (!hasStorage(storage)) return null;
     const installationDigest = safeGet(storage, INSTALLATION_DIGEST_KEY);
     if (!DIGEST.test(installationDigest || '')) return null;
+    const revisionRaw = safeGet(storage, PREFERENCE_REVISION_KEY);
+    const preferenceRevision = parseRevision(revisionRaw);
+    if (preferenceRevision === null) return null;
     const receiptRaw = safeGet(storage, PREFERENCE_RECEIPT_KEY);
     const parsed = parseEnvelope(receiptRaw, installationDigest);
-    if (!parsed) return null;
+    if (!parsed || parsed.receipt.preferenceRevision !== preferenceRevision) return null;
     if (safeGet(storage, INSTALLATION_DIGEST_KEY) !== installationDigest ||
+            safeGet(storage, PREFERENCE_REVISION_KEY) !== revisionRaw ||
             safeGet(storage, PREFERENCE_RECEIPT_KEY) !== receiptRaw) return null;
     return promoteStoredPreferenceReceipt({
         activeInstallationDigest: installationDigest,
@@ -174,28 +185,34 @@ export function recordExplicitLocalChoice(input = {}) {
     if (!hasStorage(storage) || !SURFACES.has(surface) || !preference ||
             preference.enabled !== true) return null;
     const digestBefore = safeGet(storage, INSTALLATION_DIGEST_KEY);
+    const revisionBefore = safeGet(storage, PREFERENCE_REVISION_KEY);
     const receiptBefore = safeGet(storage, PREFERENCE_RECEIPT_KEY);
-    if (digestBefore === undefined || receiptBefore === undefined) return null;
+    if (digestBefore === undefined || revisionBefore === undefined ||
+            receiptBefore === undefined) return null;
     const snapshots = [
         [INSTALLATION_DIGEST_KEY, digestBefore],
+        [PREFERENCE_REVISION_KEY, revisionBefore],
         [PREFERENCE_RECEIPT_KEY, receiptBefore],
     ];
-    if (digestBefore === null && receiptBefore !== null) return null;
+    if (digestBefore === null && (revisionBefore !== null || receiptBefore !== null)) return null;
+    if ((revisionBefore === null) !== (receiptBefore === null)) return null;
     const installationDigest = ensureInstallationDigest({ storage, randomBytes });
     if (!installationDigest) return null;
     const digestWrite = [[INSTALLATION_DIGEST_KEY, installationDigest]];
     const rollbackDigest = () => restore(storage, snapshots, digestWrite);
     const previous = receiptBefore === null ? null : parseEnvelope(receiptBefore, installationDigest);
-    if (receiptBefore !== null && !previous) {
+    const previousRevision = parseRevision(revisionBefore);
+    if (receiptBefore !== null && (!previous || previousRevision === null ||
+            previous.receipt.preferenceRevision !== previousRevision)) {
         rollbackDigest();
         return null;
     }
-    const previousRevision = previous?.receipt.preferenceRevision || 0;
-    if (previousRevision >= Number.MAX_SAFE_INTEGER) {
+    const currentRevision = previousRevision || 0;
+    if (currentRevision >= Number.MAX_SAFE_INTEGER) {
         rollbackDigest();
         return null;
     }
-    const preferenceRevision = previousRevision + 1;
+    const preferenceRevision = currentRevision + 1;
     const receipt = issueExplicitLocalChoiceReceipt({
         activeInstallationDigest: installationDigest,
         preferenceRevision,
@@ -223,18 +240,22 @@ export function recordExplicitLocalChoice(input = {}) {
     }
     const transactionWrites = [
         [INSTALLATION_DIGEST_KEY, installationDigest],
+        [PREFERENCE_REVISION_KEY, String(preferenceRevision)],
         [PREFERENCE_RECEIPT_KEY, raw],
     ];
     const rollbackTransaction = (written = transactionWrites) => restore(storage, snapshots, written);
     try {
+        storage.setItem(PREFERENCE_REVISION_KEY, String(preferenceRevision));
         storage.setItem(PREFERENCE_RECEIPT_KEY, raw);
     } catch {
         rollbackTransaction();
         return null;
     }
     const digestReadback = safeGet(storage, INSTALLATION_DIGEST_KEY);
+    const revisionReadback = safeGet(storage, PREFERENCE_REVISION_KEY);
     const receiptReadback = safeGet(storage, PREFERENCE_RECEIPT_KEY);
-    if (digestReadback !== installationDigest || receiptReadback !== raw) {
+    if (digestReadback !== installationDigest ||
+            revisionReadback !== String(preferenceRevision) || receiptReadback !== raw) {
         rollbackTransaction();
         return null;
     }
@@ -252,6 +273,7 @@ export function recordExplicitLocalChoice(input = {}) {
         },
     });
     if (!promoted || safeGet(storage, INSTALLATION_DIGEST_KEY) !== installationDigest ||
+            safeGet(storage, PREFERENCE_REVISION_KEY) !== String(preferenceRevision) ||
             safeGet(storage, PREFERENCE_RECEIPT_KEY) !== raw) {
         rollbackTransaction();
         return null;

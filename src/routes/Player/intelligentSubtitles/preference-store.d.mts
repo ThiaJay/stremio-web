@@ -16,6 +16,7 @@ export type StoredSubtitlePreferenceProvenance = Extract<
 
 export const INSTALLATION_DIGEST_KEY: string;
 export const PREFERENCE_RECEIPT_KEY: string;
+export const PREFERENCE_REVISION_KEY: string;
 
 export function ensureInstallationDigest(input: {
     storage: InstallationLocalStorage;

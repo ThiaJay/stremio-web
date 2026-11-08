@@ -31,12 +31,14 @@ export function preferenceBinding(input: {
 export function verifySubtitlePreferenceProvenance(input: {
     sessionPreference?: SubtitlePreference | null;
     globalLanguage?: string | null;
+    preferenceRevision?: number | null;
     preferenceProvenance?: SubtitlePreferenceProvenance | null;
     activeInstallationDigest?: string | null;
 }): boolean;
 export function needsSubtitlePreferenceChoice(input: {
     sessionPreference?: SubtitlePreference | null;
     globalLanguage?: string | null;
+    preferenceRevision?: number | null;
     preferenceProvenance?: SubtitlePreferenceProvenance | null;
     activeInstallationDigest?: string | null;
 }): boolean;

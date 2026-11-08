@@ -12,7 +12,8 @@ const evidenceKeys = [
 ];
 const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'sessionSource'];
 const provenanceRequestKeys = [
-  'sessionPreference', 'globalLanguage', 'preferenceProvenance', 'activeInstallationDigest',
+  'sessionPreference', 'globalLanguage', 'preferenceRevision',
+  'preferenceProvenance', 'activeInstallationDigest',
 ];
 
 const closedPlainDataClone = (value) => {
@@ -109,7 +110,8 @@ export function verifySubtitlePreferenceProvenance(input = {}) {
   const request = dataRecord(input, provenanceRequestKeys);
   if (!request) return false;
   const {
-    sessionPreference, globalLanguage, preferenceProvenance, activeInstallationDigest,
+    sessionPreference, globalLanguage, preferenceRevision,
+    preferenceProvenance, activeInstallationDigest,
   } = request;
   const preference = subtitlePreferenceSnapshot(sessionPreference);
   if (!preference) return false;
@@ -128,7 +130,8 @@ export function verifySubtitlePreferenceProvenance(input = {}) {
       requiredEvidenceKeys.some((key) => !own(evidence, key))) return false;
   if (typeof activeInstallationDigest !== 'string' || !digest.test(activeInstallationDigest) ||
       evidence.installationDigest !== activeInstallationDigest) return false;
-  if (!Number.isSafeInteger(evidence.preferenceRevision) || evidence.preferenceRevision < 1) return false;
+  if (!Number.isSafeInteger(preferenceRevision) || preferenceRevision < 1 ||
+      evidence.preferenceRevision !== preferenceRevision) return false;
   if (!sameBinding(evidence.binding, expected)) return false;
   if (evidence.kind === 'explicit-local-choice') {
     if (!surfaces.has(evidence.surface) || evidence.choice !== 'enabled') return false;
@@ -142,7 +145,8 @@ export function needsSubtitlePreferenceChoice(input = {}) {
   const request = dataRecord(input, provenanceRequestKeys);
   if (!request) return true;
   const {
-    sessionPreference, globalLanguage, preferenceProvenance, activeInstallationDigest,
+    sessionPreference, globalLanguage, preferenceRevision,
+    preferenceProvenance, activeInstallationDigest,
   } = request;
   const preference = subtitlePreferenceSnapshot(sessionPreference);
   if (!preference) return globalLanguage != null;
@@ -153,7 +157,8 @@ export function needsSubtitlePreferenceChoice(input = {}) {
   if (preference.enabled !== true && globalLanguage == null) return false;
   // A preferred language by itself is not proof that captions were enabled.
   return !verifySubtitlePreferenceProvenance({
-    sessionPreference: preference, globalLanguage, preferenceProvenance, activeInstallationDigest,
+    sessionPreference: preference, globalLanguage, preferenceRevision,
+    preferenceProvenance, activeInstallationDigest,
   });
 }
 

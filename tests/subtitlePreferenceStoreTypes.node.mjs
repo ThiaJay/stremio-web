@@ -12,7 +12,7 @@ const gitBlob = async (name) => {
 };
 
 test('source declarations retain current exact Foundation identities', async () => {
-  assert.equal(await gitBlob('preference-provenance.d.mts'), '0d988eb623279118ca21747d7f5db5960c4d400b');
+  assert.equal(await gitBlob('preference-provenance.d.mts'), '0ef51f4b10283e2363e13e10db5d851d947a4396');
   assert.equal(await gitBlob('preference-receipt.d.mts'), 'd01af99e9ea5c60f999c26b9c4597c6592341763');
 });
 
@@ -22,6 +22,7 @@ test('store declaration exposes only the closed local-choice API', async () => {
   assert.match(declaration, /sessionPreference: SubtitlePreference & \{ enabled: true \}/);
   assert.match(declaration, /import type \{[\s\S]*SubtitlePreference,[\s\S]*SubtitlePreferenceProvenance/);
   assert.match(declaration, /randomBytes: SubtitlePreferenceEntropySource/);
+  assert.match(declaration, /PREFERENCE_REVISION_KEY/);
   assert.doesNotMatch(declaration, /account|migration|deviceId|packageName/i);
 });
 

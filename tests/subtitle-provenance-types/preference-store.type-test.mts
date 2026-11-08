@@ -1,4 +1,5 @@
 import {
+    PREFERENCE_REVISION_KEY,
     ensureInstallationDigest,
     loadStoredPreference,
     recordExplicitLocalChoice,
@@ -36,4 +37,4 @@ recordExplicitLocalChoice({ storage, randomBytes, sessionPreference: { enabled: 
 // @ts-expect-error entropy must be opaque bytes, never an account or device identifier string.
 ensureInstallationDigest({ storage, randomBytes: () => 'identity' });
 
-void [installationDigest, loaded, recorded];
+void [PREFERENCE_REVISION_KEY, installationDigest, loaded, recorded];
