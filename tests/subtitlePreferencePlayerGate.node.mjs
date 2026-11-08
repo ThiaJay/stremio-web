@@ -265,6 +265,51 @@ test('same-installation receipts cannot promote missing or null enabled state in
     }
 });
 
+test('null installation digest cannot verify, issue or promote subtitle authority', () => {
+    const activeInstallationDigest = '0'.repeat(64);
+    const sessionPreference = { enabled: true, language: 'eng' };
+    const globalLanguage = 'eng';
+    const binding = preferenceBinding({ sessionPreference, globalLanguage });
+    const receipt = {
+        schemaVersion: 1,
+        kind: 'same-installation-setting',
+        installationDigest: activeInstallationDigest,
+        preferenceRevision: 1,
+        binding,
+    };
+    assert.equal(verifySubtitlePreferenceProvenance({
+        activeInstallationDigest,
+        preferenceRevision: 1,
+        sessionPreference,
+        globalLanguage,
+        preferenceProvenance: receipt,
+    }), false);
+    assert.equal(issueExplicitLocalChoiceReceipt({
+        activeInstallationDigest,
+        preferenceRevision: 1,
+        sessionPreference,
+        globalLanguage,
+        localChoiceEvent: {
+            installationDigest: activeInstallationDigest,
+            preferenceRevision: 1,
+            surface: 'first-run',
+            choice: 'enabled',
+        },
+    }), null);
+    assert.equal(promoteStoredPreferenceReceipt({
+        activeInstallationDigest,
+        sessionPreference,
+        globalLanguage,
+        storedReceipt: receipt,
+        storageReadback: {
+            scope: 'installation-local',
+            installationDigest: activeInstallationDigest,
+            preferenceRevision: 1,
+            binding,
+        },
+    }), null);
+});
+
 test('hostile top-level player requests fail closed without getter execution', () => {
     const storage = new MemoryStorage();
     let reads = 0;

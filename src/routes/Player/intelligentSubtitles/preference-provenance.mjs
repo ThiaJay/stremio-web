@@ -2,6 +2,9 @@
 // another application's private subtitle preference. This pure guard performs
 // no reads, writes or player actions.
 const digest = /^[0-9a-f]{64}$/;
+const nullDigest = '0'.repeat(64);
+const validDigest = (value) => typeof value === 'string' &&
+  value !== nullDigest && digest.test(value);
 const kinds = new Set(['same-installation-setting', 'explicit-local-choice']);
 const surfaces = new Set(['first-run', 'subtitle-settings']);
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
@@ -128,7 +131,7 @@ export function verifySubtitlePreferenceProvenance(input = {}) {
     : ['schemaVersion', 'kind', 'installationDigest', 'preferenceRevision', 'binding'];
   if (Reflect.ownKeys(evidence).length !== requiredEvidenceKeys.length ||
       requiredEvidenceKeys.some((key) => !own(evidence, key))) return false;
-  if (typeof activeInstallationDigest !== 'string' || !digest.test(activeInstallationDigest) ||
+  if (!validDigest(activeInstallationDigest) ||
       evidence.installationDigest !== activeInstallationDigest) return false;
   if (!Number.isSafeInteger(preferenceRevision) || preferenceRevision < 1 ||
       evidence.preferenceRevision !== preferenceRevision) return false;

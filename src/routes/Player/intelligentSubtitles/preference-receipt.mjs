@@ -6,6 +6,9 @@ import {
 } from './preference-provenance.mjs';
 
 const digest = /^[0-9a-f]{64}$/;
+const nullDigest = '0'.repeat(64);
+const validDigest = (value) => typeof value === 'string' &&
+  value !== nullDigest && digest.test(value);
 const surfaces = new Set(['first-run', 'subtitle-settings']);
 const revision = (value) => Number.isSafeInteger(value) && value > 0;
 const bindingKeys = ['sessionEnabled', 'sessionLanguage', 'globalLanguage', 'sessionSource'];
@@ -41,7 +44,7 @@ export function issueExplicitLocalChoiceReceipt(input = {}) {
   const choiceEvent = dataRecord(localChoiceEvent, [
     'installationDigest', 'preferenceRevision', 'surface', 'choice',
   ]);
-  if (typeof activeInstallationDigest !== 'string' || !digest.test(activeInstallationDigest) ||
+  if (!validDigest(activeInstallationDigest) ||
       !revision(preferenceRevision)) return null;
   if (!preference || !choiceEvent) return null;
   if (choiceEvent.installationDigest !== activeInstallationDigest ||
